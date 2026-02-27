@@ -1,0 +1,235 @@
+import {
+  Container,
+  Paper,
+  CircularProgress,
+  Alert,
+  Typography,
+  TextField,
+  Stack,
+  Button,
+  Snackbar,
+  IconButton,
+} from "@mui/material";
+import ProfileForm from "./ProfileForm";
+import { useProfile } from "./useProfile";
+import { useProfileCompletion } from "../../auth/useProfileCompletion"; // Imported
+import { useState } from "react";
+import { changePasswordApi } from "../../api/auth.api";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthProvider";
+import { Close } from "@mui/icons-material";
+
+export default function ProfilePage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const {
+    profile,
+    loading,
+    error,
+    saveProfile,
+    uploadAvatar,
+    deleteAvatar,
+    saving,
+    uploading,
+    clearError,
+  } = useProfile();
+
+  const { needsCompletion } = useProfileCompletion(); // Get completion status
+
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const basePath =
+    user?.role === "student"
+      ? "/student"
+      : user?.role === "teacher"
+        ? "/teacher"
+        : user?.role === "parent"
+          ? "/parent"
+          : "";
+
+  async function handleProfileSubmit(data) {
+    try {
+      await saveProfile(data);
+      setSaveSuccess(true);
+      const target = basePath ? `${basePath}/dashboard` : "/";
+      setTimeout(() => {
+        navigate(target, { replace: true });
+      }, 800);
+    } catch (err) {
+      // Errors are handled by the hook and shown via error state.
+    }
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPwError("");
+    setPwSuccess("");
+
+    if (!oldPassword || !newPassword) {
+      setPwError("Please fill in all password fields.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPwError("New password and confirmation do not match.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPwError("New password must be at least 6 characters long.");
+      return;
+    }
+
+    try {
+      setPwLoading(true);
+      await changePasswordApi({
+        old_password: oldPassword,
+        new_password: newPassword,
+      });
+      setPwSuccess("Password updated successfully.");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message || err?.message || "Failed to update password.";
+      setPwError(msg);
+    } finally {
+      setPwLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Container sx={{ mt: 6, textAlign: "center" }}>
+        <CircularProgress />
+        <Typography variant="body2" sx={{ mt: 2 }}>
+          Loading profile...
+        </Typography>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth="sm" sx={{ mt: 4, pb: 4 }}>
+      <Snackbar
+        open={saveSuccess}
+        autoHideDuration={2000}
+        onClose={() => setSaveSuccess(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity="success" onClose={() => setSaveSuccess(false)} sx={{ width: "100%" }}>
+          Profile saved successfully.
+        </Alert>
+      </Snackbar>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={clearError}>
+          {error}
+        </Alert>
+      )}
+
+      {profile && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              {needsCompletion ? "Complete Your Profile" : "Profile Information"}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => navigate(-1)}
+              aria-label="Close"
+            >
+              <Close />
+            </IconButton>
+          </Stack>
+          <ProfileForm
+            profile={profile}
+            onSave={saveProfile}
+            onSubmit={handleProfileSubmit}
+            onAvatarUpload={uploadAvatar}
+            onAvatarDelete={deleteAvatar}
+            saving={saving}
+            uploading={uploading}
+            error={error}
+            onClearError={clearError}
+            isCompleting={needsCompletion}
+          />
+        </Paper>
+      )}
+
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+          Change Password
+        </Typography>
+
+        {pwError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPwError("")}>
+            {pwError}
+          </Alert>
+        )}
+        {pwSuccess && (
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setPwSuccess("")}>
+            {pwSuccess}
+          </Alert>
+        )}
+
+        <Stack
+          component="form"
+          spacing={2}
+          onSubmit={handleChangePassword}
+        >
+          <TextField
+            label="Current Password"
+            type="password"
+            value={oldPassword}
+            onChange={(e) => setOldPassword(e.target.value)}
+            fullWidth
+            autoComplete="current-password"
+            required
+          />
+          <TextField
+            label="New Password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            fullWidth
+            autoComplete="new-password"
+            helperText="Minimum 6 characters"
+            required
+          />
+          <TextField
+            label="Confirm New Password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            fullWidth
+            autoComplete="new-password"
+            error={newPassword !== confirmPassword && confirmPassword.length > 0}
+            helperText={
+              newPassword !== confirmPassword && confirmPassword.length > 0
+                ? "Passwords do not match"
+                : ""
+            }
+            required
+          />
+
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            disabled={pwLoading || !oldPassword || !newPassword || !confirmPassword}
+          >
+            {pwLoading ? "Updating..." : "Update Password"}
+          </Button>
+        </Stack>
+      </Paper>
+    </Container>
+  );
+}

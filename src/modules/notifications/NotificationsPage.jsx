@@ -1,0 +1,76 @@
+import { useState } from "react";
+import {
+  Container,
+  CircularProgress,
+  Alert,
+  Typography,
+  Fab,
+  Box
+} from "@mui/material";
+import { Add } from "@mui/icons-material";
+import { useNotifications } from "./useNotifications";
+import NotificationsList from "./NotificationsList";
+import CreateNotificationDialog from "./CreateNotificationDialog";
+import { useAuth } from "../../auth/AuthProvider";
+
+export default function NotificationsPage() {
+  const { user } = useAuth();
+  const {
+    items,
+    loading,
+    error,
+    acknowledge,
+    refresh // Now available
+  } = useNotifications();
+
+  const [showCreate, setShowCreate] = useState(false);
+
+  const canCreate = user?.role === "teacher" || user?.role === "admin";
+
+  if (loading) {
+    return (
+      <Container sx={{ mt: 6, textAlign: "center" }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container sx={{ mt: 6 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth="sm" sx={{ mt: 4, pb: 10 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        Notifications
+      </Typography>
+
+      <NotificationsList
+        items={items}
+        onAcknowledge={acknowledge}
+      />
+
+      {canCreate && (
+        <>
+          <Box sx={{ position: 'fixed', bottom: 80, right: 16, zIndex: 1000 }}>
+            <Fab color="primary" onClick={() => setShowCreate(true)}>
+              <Add />
+            </Fab>
+          </Box>
+
+          <CreateNotificationDialog
+            open={showCreate}
+            onClose={() => setShowCreate(false)}
+            onSuccess={() => {
+              if (refresh) refresh();
+            }}
+          />
+        </>
+      )}
+    </Container>
+  );
+}
