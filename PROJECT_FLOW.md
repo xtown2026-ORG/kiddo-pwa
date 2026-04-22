@@ -1,307 +1,602 @@
-# PWA Kiddo - Full Project Flow
+# Kiddos PWA Project Flow
 
-## 1. Project Overview
+## 1. What This Project Is
 
-`pwa-kiddo` is a React + Vite Progressive Web App with role-based experiences for:
+`kiddos-pwa` is the role-based Progressive Web App for end users of the Kiddo platform.
+
+Primary roles supported in this app:
 
 - `student`
 - `teacher`
 - `parent`
 
-Core stack:
+Main stack:
 
-- React 19
+- React
 - React Router
 - MUI
 - Axios
-- `vite-plugin-pwa` (service worker + manifest)
-- Socket.io client (quiz/group real-time features)
+- Vite
+- `vite-plugin-pwa`
+- Socket.IO client for realtime quiz and group chat
 
+This app is separate from the admin console. It is the day-to-day experience for teachers, students, and parents.
 
-## 2. Boot Flow (App Startup)
+## 2. Boot Flow
 
-Entry path:
+Entry file: `src/main.jsx`
 
-1. `src/main.jsx`
-2. `src/app/App.jsx`
+Startup sequence:
 
-`src/main.jsx` initializes:
+1. `registerServiceWorker()` runs before render
+2. React mounts the app with:
+   - `ThemeProvider`
+   - `AuthProvider`
+   - `BrowserRouter`
+   - `App`
 
-- `ThemeProvider`
-- `AuthProvider`
-- `BrowserRouter`
-- `registerServiceWorker()`
+That means every screen runs inside:
 
-So all pages run inside theme + auth context + router.
+- theme context
+- auth/session context
+- router context
+- PWA registration state
 
+## 3. App Root Flow
 
-## 3. Environment and API Base
+Root file: `src/app/App.jsx`
 
-Config source:
+The app root does four important things:
 
-- `.env`
-- `src/api/config.js`
-- `vite.config.js` proxy
+1. watches online/offline status using `useOnlineStatus`
+2. redirects offline users to `OfflinePage`
+3. computes the correct role landing path from the current auth user
+4. applies route guards around all role app shells
 
-Key behavior:
+Main route groups:
 
-- `VITE_API_BASE_URL=/api` (frontend uses relative base URL)
-- Vite dev proxy forwards `/api` to `VITE_LOCAL_API_TARGET` (default `http://127.0.0.1:3002`)
+- `/login`
+- `/first-login`
+- `/approval-pending`
+- `/student/*`
+- `/teacher/*`
+- `/parent/*`
+- `/unauthorized`
 
-This means browser calls `http://localhost:5174/api/...`, and Vite forwards to backend.
-
+If the user is authenticated, `/` and unknown routes redirect to the role-specific home.
 
 ## 4. Authentication Flow
 
-Main auth logic:
+Core files:
 
 - `src/auth/AuthProvider.jsx`
 - `src/api/auth.api.js`
 - `src/modules/login/useLogin.jsx`
+- `src/modules/login/LoginForm.jsx`
 
-### Login
+### Login Flow
 
-1. `LoginForm` -> `useLogin.handleLogin()`
-2. Calls `loginApi("/auth/login")`
-3. Expects `{ token }`
-4. `AuthProvider.login(token)` validates and stores token in `localStorage`
-5. Decodes JWT with `jwt-decode` and sets `user`
+1. user submits credentials on the login page
+2. login logic calls backend auth endpoint
+3. backend returns JWT
+4. `AuthProvider.login(token)` validates and stores the token
+5. token is saved in `localStorage`
+6. JWT is decoded into `user`
+7. the app redirects based on role
 
-### Session restore
+### Session Restore Flow
 
-On app refresh:
+On refresh:
 
 1. `AuthProvider` reads token from `localStorage`
-2. Validates token shape + expiry
-3. Restores `user` from token payload
+2. validates token format
+3. checks expiry
+4. rejects unsupported roles
+5. restores `token` and decoded `user`
 
-### Profile hydration
+Only these roles are accepted in this app:
 
-After token is active, provider fetches role profile:
+- `student`
+- `teacher`
+- `parent`
 
-- student -> `/students/me`
-- teacher -> fallback chain:
-  - `/teachers/me`
-  - `/teachers/profile`
-  - `/teacher/me`
-- parent -> `/parents/parents/profile`
+### Profile Hydration Flow
 
-and merges `name/phone/email/avatar` into auth user state.
+After session restore or login:
 
-### Logout
+1. `AuthProvider` calls `getMyProfile(user.role)`
+2. role-specific profile fields are merged into `user`
+3. frontend enriches session state with:
+   - name
+   - phone
+   - email
+   - avatar
+   - class/section data
+   - `approval_status`
+   - `first_login`
 
-- Local logout always clears token/user
-- server logout API is currently placeholder
+This is important because JWT payload alone is not the complete UI identity.
 
+### Logout Flow
 
-## 5. Route Protection and Access Control
+1. local logout clears `localStorage`
+2. auth state is reset
+3. logout API is attempted, but local cleanup is the real guarantee
 
-Top-level router:
+## 5. Route Guard Flow
 
-- `src/app/App.jsx`
+The PWA has a layered route-guard system.
 
-Guards:
+Core guard files:
 
-- `RequireAuth`: must be logged in
-- `RequireRole`: role must match route
-- `ForceProfileCompletion`: redirects first-login users
-- `RequireApproval`: redirects non-approved users to `/approval-pending`
+- `src/auth/RequireAuth.jsx`
+- `src/auth/RequireRole.jsx`
+- `src/auth/ForceProfileCompletion.jsx`
+- `src/auth/RequireApproval.jsx`
+- `src/pages/ProtectedAppWrapper.jsx`
 
-Flow:
+### Effective Guard Sequence
 
-1. `/login` is public
-2. `/student/*`, `/teacher/*`, `/parent/*` are protected by all guards
-3. `/unauthorized` is protected
-4. unknown path redirects authenticated user to role home
+For protected role routes, the flow is:
 
+`RequireAuth -> RequireRole -> RequireApproval -> ForceProfileCompletion -> role app shell`
+
+### Guard Responsibilities
+
+`RequireAuth`
+
+- ensures a logged-in user exists
+- redirects to `/login` if not
+- can route first-login users to completion
+
+`RequireRole`
+
+- ensures the JWT role matches the route family
+
+`RequireApproval`
+
+- refetches profile status from backend
+- checks `approval_status`
+- redirects non-approved users to `/approval-pending`
+
+`ForceProfileCompletion` and `ProtectedAppWrapper`
+
+- redirect first-login users into profile completion flows
+- special-case parents so their completion path can be `/parent/profile`
 
 ## 6. Role App Shells
 
-### Student app
+## Student App Flow
 
 File: `src/pages/StudentApp.jsx`
 
-Contains lazy routes:
+Shell components:
 
-- dashboard, profile, timetable, attendance, diary, notifications
+- `AppHeader`
+- `StudentSidebar`
+- `BottomNav`
+- `StudentTestLockGate`
+
+Main student routes include:
+
+- dashboard
+- profile
+- timetable
+- attendance
+- diary
+- notifications
 - report cards
 - group chat
-- ai-chat, voice-chat
-- quiz flows
+- AI chat
+- voice chat
+- quiz
+- AI tests
+- academic domains
+- personalized pages
+- foundation stage
 - themes
 
-### Teacher app
+This shell is optimized for a mobile-first learner experience with bottom navigation and sidebar toggles.
+
+## Teacher App Flow
 
 File: `src/pages/TeacherApp.jsx`
 
-Contains lazy routes:
+Shell components:
 
-- dashboard, profile, timetable, diary, notifications
+- `AppHeader`
+- `TeacherSidebar`
+- `BottomNav`
+
+Main teacher routes include:
+
+- dashboard
+- profile
+- teacher timetable
+- diary
+- notifications
 - class sessions
 - approvals
-- exams/create
+- exam creation
 - assigned classes
 - report card entry
+- student reports
 - AI tools
+- teacher AI test results
 - group chat
-- quiz multiplayer pages
+- quiz flows
 - themes
 
-### Parent app
+This shell is operationally centered around classroom management and planning.
+
+## Parent App Flow
 
 File: `src/pages/ParentApp.jsx`
 
-Contains routes:
+Shell components:
 
-- dashboard, profile, timetable, attendance, diary, notifications
+- `AppHeader`
+- `ParentSidebar`
+- `BottomNav`
+
+Main parent routes include:
+
+- dashboard
+- profile
+- timetable
+- diary
+- notifications
+- payments
+- AI tests
 - report card detail
 - group chat
+- foundation stage
 - themes
 
+This shell is a monitoring/support experience rather than a content-authoring experience.
 
-## 7. API Layer and Request Lifecycle
+## 7. Shared Request Flow
 
-Files:
+Core API files:
 
+- `src/api/config.js`
 - `src/api/axios.js`
 - `src/api/axios.interceptors.js`
-- `src/api/config.js`
 
-Behavior:
+### Axios Client Flow
 
-1. Axios instance created with `baseURL` + timeout
-2. Request timestamp metadata added
-3. Request/response logs printed in dev
-4. Auth interceptor injects `Authorization: Bearer <token>`
-5. Token expiry checked before request
-6. Retry policy for retryable failures
-7. On `401`: logout
-8. On `403 Forbidden role`: one-time redirect to `/unauthorized`
+1. shared axios instance is created with base URL and timeout
+2. request metadata is attached for timing
+3. request interceptor injects `Authorization` from stored token
+4. request interceptor rejects expired tokens before sending
+5. response interceptor handles retries for retryable failures
+6. `401` triggers logout
+7. some `403` cases trigger special redirects or session resets
 
+### Base URL Flow
 
-## 8. Main Feature Modules (High-Level)
+The app is built to use:
 
-API files are under `src/modules/**/**.api.js`.
+- environment config from `.env`
+- relative `/api` routing in development
+- Vite proxy behavior from `vite.config.js`
 
-Primary modules:
+Typical dev flow:
 
-- Dashboard: `/students|teachers|parents/dashboard`
-- Timetable: section and teacher timetable endpoints
-- Attendance: role-specific summaries + teacher marking endpoints
-- Diary/Homework: CRUD and analytics endpoints
-- Notifications: create/list/acknowledge
-- Group chat: groups + messages + delete
-- Profile: get/update role-specific profile
-- Report card: student list/detail + teacher entry
-- Teacher class sessions: start/end/list + attendance marking
-- Approvals: pending list + approve/reject flows
-- AI chat/tools: `/rag/ask`, `/teacher/ai`
-- Quiz: single/multi quiz endpoints + leaderboard/history
+1. browser calls the PWA dev server
+2. frontend requests `/api/...`
+3. Vite proxies those calls to the backend server
 
+## 8. Feature Module Flow
 
-## 9. First Login and Approval Flow
+The PWA is organized mostly by feature folders under `src/modules`.
 
-First login page:
+Common module structure:
 
-- `src/pages/FirstLoginPage.jsx`
+- page components
+- hooks
+- `*.api.js`
+- sometimes sockets/components/helpers
 
-Steps:
+### Dashboard Flow
 
-1. Detect `user.first_login === true`
-2. Collect role-specific profile fields
-3. Optional avatar upload through `cloudStorageService`
-4. Submit via `completeProfileApi`
-5. If backend returns new token, replace session with `login(newToken)`
-6. Navigate to `/`
+Files around:
 
-Approval gate:
+- `src/modules/dashboard/*`
 
-- `RequireApproval` fetches profile and checks `approval_status`
-- non-approved users are redirected to `ApprovalPending`
-- page supports re-check and logout
+Purpose:
 
+- role-specific summary cards and quick navigation
+- acts as the default landing experience after login
 
-## 10. File Upload/Cloud Storage Flow
+### Profile Flow
 
-Main file:
+Files around:
 
-- `src/services/cloudStorage.js`
+- `src/modules/profile/*`
 
-Design:
+Purpose:
 
-- pluggable provider interface (`StorageProvider`)
-- current default provider: `base64`
-- optional provider: S3 + CloudFront (via backend upload endpoint)
-- Cloudinary provider stub exists but not implemented
+- load current role profile
+- update profile details
+- upload avatar where supported
 
-Profile upload path:
+### Timetable Flow
 
-1. `profile.api.uploadProfilePicture(file, userId)`
-2. image validate/compress via `utils/imageUtils`
-3. upload via cloud storage service
-4. URL stored in profile payload
+Files around:
 
+- `src/modules/timetable/*`
+- `src/modules/teacher-timetable/*`
 
-## 11. PWA Flow
+Purpose:
 
-PWA config:
+- student and parent read section timetable
+- teacher reads and manages teaching timetable
 
-- `vite.config.js` with `VitePWA`
-- `public/manifest.json`
+### Attendance Flow
+
+Files around:
+
+- `src/modules/attendance/*`
+- `src/modules/teacher-class-sessions/*`
+
+Purpose:
+
+- student/parent consume attendance views
+- teacher starts sessions and marks attendance-related activity
+
+### Diary / Homework Flow
+
+Files around:
+
+- `src/modules/diary/*`
+
+Purpose:
+
+- view homework/diary entries
+- teachers create entries
+- students/parents consume them
+
+### Notification Flow
+
+Files around:
+
+- `src/modules/notifications/*`
+
+Purpose:
+
+- list announcements
+- create announcements where role allows
+- acknowledge notifications
+
+### Report Card Flow
+
+Files around:
+
+- `src/modules/report-card/*`
+
+Purpose:
+
+- list or view report cards for student/parent
+- teacher enters marks and report card data
+
+### Approval Flow
+
+Files around:
+
+- `src/modules/approvals/*`
+
+Purpose:
+
+- teacher reviews pending updates
+- approval actions call the backend approval endpoints
+
+### Group Chat Flow
+
+Files around:
+
+- `src/modules/group-chat/*`
+
+Purpose:
+
+- list chats
+- enter chat room
+- use realtime socket updates
+
+### Quiz Flow
+
+Files around:
+
+- `src/modules/quiz/*`
+
+Purpose:
+
+- single-player quiz
+- multiplayer quiz lobby/play/results
+- realtime quiz socket coordination
+
+### AI Chat / Voice / AI Tests Flow
+
+Files around:
+
+- `src/modules/ai-chat/*`
+- `src/modules/voice-chat/*`
+- `src/modules/ai-tools/*`
+- `src/modules/ai-tests/*`
+
+Purpose:
+
+- student AI learning chat
+- voice-based interaction
+- teacher AI tools
+- assigned AI tests and results
+
+## 9. Realtime Flow
+
+### Group Chat Socket
+
+File: `src/modules/group-chat/groupChat.socket.js`
+
+Flow:
+
+1. connect to Socket.IO server with auth token
+2. join a chat room
+3. send/receive group events
+4. disconnect when done
+
+### Quiz Socket
+
+File: `src/modules/quiz/socket/quiz.socket.js`
+
+Flow:
+
+1. connect with token
+2. join quiz session room
+3. listen for question/answer/game status events
+4. disconnect at end of flow
+
+### Important Frontend Realtime Note
+
+Both socket helpers keep a singleton connection in module scope. That simplifies reuse, but it means lifecycle cleanup matters to avoid stale sessions.
+
+## 10. PWA and Offline Flow
+
+Core files:
+
 - `src/pwa/serviceWorker.js`
+- `src/pwa/usePwaInstall.js`
+- `src/pwa/manifest.js`
+- `public/manifest.json`
 
-Capabilities:
+### Service Worker Flow
 
-- installable manifest
-- service worker registration
-- update prompt (`onNeedRefresh`)
-- offline-ready event
-- cache management helpers
+1. service worker is registered at app start
+2. update prompts can ask the user to reload
+3. offline-ready state is announced
+4. custom browser events can be dispatched for PWA notifications
 
+### Offline Manager Flow
 
-## 12. Offline and Online Behavior
+`OfflineManager` in `src/pwa/serviceWorker.js` tracks:
 
-- `useOnlineStatus` in app root shows `OfflinePage` when offline
-- service worker helper emits notifications for online/offline events
-- offline manager supports pending request queue abstraction
+- online/offline status
+- listeners
+- queued requests
 
+When the device comes back online:
 
-## 13. Realtime/Interactive Features
+1. listeners are notified
+2. pending requests are retried
+3. PWA notification events are emitted
 
-- Socket-based quiz/group-chat support exists in quiz/group-chat modules
-- Voice/speech and 3D robot helpers are present (`src/speech`, `src/three`)
-- some helper files are minimal placeholders and can be expanded
+### App-Level Offline Behavior
 
+The app root also uses `useOnlineStatus`, and if offline it renders `OfflinePage`.
 
-## 14. Current Known Integration Dependency
+So this project has both:
 
-Frontend is role-guarded, but final authorization is backend-driven.
+- global visual offline gating
+- lower-level service worker/offline utilities
 
-If backend returns `403 Forbidden role` on teacher endpoints:
+## 11. Theme Flow
 
-- frontend now redirects to `/unauthorized`
-- permanent fix must be backend role normalization + route guard mapping + fresh login tokens
+Core files:
 
+- `src/theme/ThemeProvider.jsx`
+- `src/theme/themes.js`
+- `src/theme/tokens.js`
 
-## 15. End-to-End Flow Summary
+Theme responsibilities:
 
-1. App boots -> providers + router + service worker
-2. Auth restores token -> decodes user
-3. App routes user by role
-4. Guards enforce login, role, profile completion, approval
-5. Feature pages call module APIs through shared axios instance
-6. Interceptors handle auth headers, retries, and auth/role errors
-7. PWA layer handles caching, updates, and offline behavior
+- provide MUI theme tokens
+- store and restore selected theme
+- support different UI themes/pages
 
+## 12. Media and Rich Interaction Flow
 
-## 16. How to Convert This to PDF
+Additional capability layers include:
 
-If you want PDF, easiest options:
+- `src/three/*` for 3D robot rendering helpers
+- `src/speech/*` for speech recognition and audio playback
+- `src/services/cloudStorage.js` for upload abstraction
+- `src/utils/imageUtils.js` for image validation/compression
 
-1. Open `PROJECT_FLOW.md` in VS Code and print to PDF
-2. Use `pandoc`:
+These enrich the AI and profile experience beyond plain forms and tables.
 
-```bash
-pandoc PROJECT_FLOW.md -o PROJECT_FLOW.pdf
-```
+## 13. End-to-End User Flows
 
+## Student End-to-End Flow
+
+1. student logs in
+2. token is stored and decoded
+3. profile is hydrated from backend
+4. route guards check auth, role, approval, and profile completion
+5. student lands on dashboard
+6. student navigates to timetable, diary, AI chat, report cards, or quiz
+7. module APIs call backend through shared axios client
+8. socket features connect only when needed
+
+## Teacher End-to-End Flow
+
+1. teacher logs in
+2. teacher profile is hydrated
+3. approval/profile-completion gates are enforced
+4. teacher lands on dashboard
+5. teacher manages class sessions, approvals, homework, report cards, and AI tools
+6. teacher uses timetable and assignment flows to drive classroom actions
+7. teacher can enter quiz/group-chat realtime flows
+
+## Parent End-to-End Flow
+
+1. parent logs in
+2. parent profile is restored and hydrated
+3. route guards verify approval/completion
+4. parent lands on dashboard
+5. parent views child-related timetable, diary, payments, report cards, and AI tests
+
+## 14. Current Architectural Characteristics
+
+### Strengths
+
+- clear separation between auth shell and role app shells
+- robust route-guard layering
+- centralized axios client and interceptors
+- strong feature-folder organization
+- PWA/offline support is already integrated
+- realtime features are isolated into their own modules
+
+### Watchouts
+
+- some auth/profile checks are duplicated across guards and wrappers
+- approval and first-login routing logic lives in multiple places
+- singleton sockets require careful cleanup
+- offline utilities are more capable than some current UI flows actively use
+- role support is intentionally limited to `student`, `teacher`, and `parent`
+
+## 15. Recommended Reading Order
+
+1. `src/main.jsx`
+2. `src/app/App.jsx`
+3. `src/auth/AuthProvider.jsx`
+4. route guards under `src/auth/*`
+5. `src/api/axios.js`
+6. `src/api/axios.interceptors.js`
+7. role app shells:
+   - `src/pages/StudentApp.jsx`
+   - `src/pages/TeacherApp.jsx`
+   - `src/pages/ParentApp.jsx`
+8. feature modules needed for your area
+9. PWA and socket helpers
+
+## 16. Short Summary
+
+In practical terms, the PWA works like this:
+
+1. app boots with theme, auth, router, and service worker
+2. token is restored or created on login
+3. backend profile data enriches the session
+4. route guards enforce auth, role, approval, and first-login completion
+5. users enter role-specific app shells
+6. feature modules talk to backend through shared axios infrastructure
+7. chat and quiz features open realtime socket connections when needed
+8. PWA utilities handle installability, updates, and offline support

@@ -23,7 +23,7 @@ export default function DiaryPage() {
   const today = new Date().toISOString().split("T")[0];
   const [filterDate, setFilterDate] = useState(today);
   const filters = useMemo(() => {
-    return filterDate ? { created_date: filterDate } : {};
+    return filterDate ? { date: filterDate } : {};
   }, [filterDate]);
 
   const { items, loading, error, refresh } = useDiary(filters);
@@ -75,6 +75,8 @@ export default function DiaryPage() {
         Object.entries(
           items.reduce((acc, item) => {
             const raw =
+              item.homework_date ||
+              item.due_date ||
               item.created_at ||
               item.createdAt ||
               "unknown";

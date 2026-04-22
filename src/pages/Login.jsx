@@ -7,8 +7,9 @@ import {
   Chip,
   useTheme,
   Alert,
+  Avatar,
 } from "@mui/material";
-import { AutoAwesomeRounded, SchoolRounded } from "@mui/icons-material";
+import { AutoAwesomeRounded } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import LoginForm from "../modules/login/LoginForm";
 import { useEffect, useState } from "react";
@@ -33,19 +34,25 @@ export default function Login() {
   if (user) {
     if (user.role === "student") {
       if (user.first_login) return <Navigate to="/first-login" replace />;
-      if (user.approval_status && user.approval_status !== "approved") {
+      if (user.approval_status !== "approved") {
         return <Navigate to="/approval-pending" replace />;
       }
       return <Navigate to="/student/dashboard" replace />;
     }
     if (user.role === "teacher") {
       if (user.first_login) return <Navigate to="/first-login" replace />;
-      if (user.approval_status && user.approval_status !== "approved") {
+      if (user.approval_status !== "approved") {
         return <Navigate to="/approval-pending" replace />;
       }
       return <Navigate to="/teacher/dashboard" replace />;
     }
-    if (user.role === "parent") return <Navigate to="/parent/dashboard" replace />;
+    if (user.role === "parent") {
+      if (user.first_login) return <Navigate to="/first-login" replace />;
+      if (user.approval_status !== "approved") {
+        return <Navigate to="/approval-pending" replace />;
+      }
+      return <Navigate to="/parent/dashboard" replace />;
+    }
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -164,7 +171,12 @@ export default function Login() {
                       : "0 14px 32px rgba(16,185,129,0.35)",
                   }}
                 >
-                  <SchoolRounded />
+                  <Avatar
+                    src="/android-chrome-192x192.png"
+                    alt="kiddoshadow logo"
+                    variant="rounded"
+                    sx={{ width: 40, height: 40 }}
+                  />
                 </Box>
                 <Box>
                   <Typography
@@ -175,7 +187,7 @@ export default function Login() {
                       color: "text.primary",
                     }}
                   >
-                    Kiddo Shadow
+                    kiddoshadow
                   </Typography>
                 </Box>
               </Stack>

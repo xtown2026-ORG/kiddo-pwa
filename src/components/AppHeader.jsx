@@ -49,7 +49,7 @@ export default function AppHeader() {
     <AppBar position="sticky" color="default" elevation={1}>
       <Toolbar sx={{ display: "flex", gap: 2 }}>
         <Typography variant="h6" sx={{ flex: 1, fontWeight: 600 }}>
-          Kiddo Shadow
+          kiddoshadow
         </Typography>
         {user && (
           <>

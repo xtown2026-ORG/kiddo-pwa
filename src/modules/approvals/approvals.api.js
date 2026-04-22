@@ -5,3 +5,6 @@ export const getTeacherPendingApprovals = () =>
 
 export const approveRequest = (type, id, action = 'approve') =>
     api.post(`/teachers/approvals/${type}/${id}/${action}`);
+
+export const approveParentRequest = (id, action = "approve") =>
+    api.post(`/teachers/parents/${id}/approve`, { action });

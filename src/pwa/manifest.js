@@ -1,8 +1,8 @@
 // PWA Manifest Configuration
 export const pwaManifest = {
-  name: 'PWA Kiddo - Educational App',
-  short_name: 'PWA Kiddo',
-  description: 'A comprehensive Progressive Web Application for students, teachers, and parents in an educational environment',
+  name: 'kiddoshadow',
+  short_name: 'kiddoshadow',
+  description: 'kiddoshadow PWA',
   theme_color: '#1976d2',
   background_color: '#ffffff',
   display: 'standalone',
@@ -19,17 +19,17 @@ export const pwaManifest = {
       type: 'image/png'
     },
     {
-      src: '/pwa-192x192.png',
+      src: '/android-chrome-192x192.png',
       sizes: '192x192',
       type: 'image/png'
     },
     {
-      src: '/pwa-512x512.png',
+      src: '/android-chrome-192x192.png',
       sizes: '512x512',
       type: 'image/png'
     },
     {
-      src: '/pwa-512x512.png',
+      src: '/android-chrome-192x192.png',
       sizes: '512x512',
       type: 'image/png',
       purpose: 'any maskable'
@@ -55,21 +55,21 @@ export const pwaManifest = {
       short_name: 'Dashboard',
       description: 'Go to your dashboard',
       url: '/student/dashboard',
-      icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
     },
     {
       name: 'AI Chat',
       short_name: 'AI Chat',
       description: 'Start AI conversation',
       url: '/student/ai-chat',
-      icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
     },
     {
       name: 'Homework',
       short_name: 'Homework',
       description: 'View homework assignments',
       url: '/student/diary',
-      icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
     }
   ]
 };
@@ -103,3 +103,4 @@ export function updateThemeColor(theme = 'light') {
   }
   statusBarMeta.setAttribute('content', theme === 'dark' ? 'black-translucent' : 'default');
 }
+

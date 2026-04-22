@@ -96,7 +96,12 @@ export function useAiChat({ classLevel, userId }) {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+      // Persist immediately so no message is lost even if app closes before AI reply.
+      saveConversation(next);
+      return next;
+    });
     setLoading(true);
 
     try {

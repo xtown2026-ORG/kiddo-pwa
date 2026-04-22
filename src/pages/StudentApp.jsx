@@ -7,6 +7,7 @@ import BottomNav from "../components/BottomNav";
 import LoadingScreen from "../components/LoadingScreen";
 import { ProtectedAppWrapper } from "./ProtectedAppWrapper";
 import StudentSidebar from "../components/StudentSidebar";
+import StudentTestLockGate from "../modules/ai-tests/StudentTestLockGate";
 
 /* lazy pages */
 const DashboardPage = lazy(() =>
@@ -63,6 +64,39 @@ const QuizResultPage = lazy(() =>
 const ThemePage = lazy(() =>
   import("../modules/theme/ThemePage")
 );
+const AcademicDomainsPage = lazy(() =>
+  import("../modules/academic-domains/AcademicDomainsPage")
+);
+const PersonalizedInsightsPage = lazy(() =>
+  import("../modules/personalized/PersonalizedInsightsPage")
+);
+const MindScopePage = lazy(() =>
+  import("../modules/mindscope/pages/MindScopePage")
+);
+const FoundationStagePage = lazy(() =>
+  import("../modules/foundation-stage/FoundationStagePage")
+);
+const FoundationModulePage = lazy(() =>
+  import("../modules/foundation-stage/FoundationModulePage")
+);
+const LearningModuleIntroPage = lazy(() =>
+  import("../modules/learning-analytics/LearningModuleIntroPage")
+);
+const HobbiesPage = lazy(() =>
+  import("../modules/learning-analytics/HobbiesPage")
+);
+const HobbiesSelectedPage = lazy(() =>
+  import("../modules/learning-analytics/HobbiesSelectedPage")
+);
+const StudentAssignedTestsPage = lazy(() =>
+  import("../modules/ai-tests/StudentAssignedTestsPage")
+);
+const StudentAssignedTestDetailPage = lazy(() =>
+  import("../modules/ai-tests/StudentAssignedTestDetailPage")
+);
+const StudentResultsPage = lazy(() =>
+  import("../modules/ai-tests/StudentResultsPage")
+);
 
 export default function StudentApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,6 +124,7 @@ export default function StudentApp() {
         <AppHeader />
 
         <StudentSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <StudentTestLockGate />
 
         <Box
           sx={{
@@ -127,6 +162,17 @@ export default function StudentApp() {
               <Route path="quiz/:id/lobby" element={<QuizLobbyPage />} />
               <Route path="quiz/:id/play" element={<QuizPlayPage />} />
               <Route path="quiz/:id/results" element={<QuizResultPage />} />
+              <Route path="ai-tests" element={<StudentAssignedTestsPage />} />
+              <Route path="ai-tests/:id" element={<StudentAssignedTestDetailPage />} />
+              <Route path="results" element={<StudentResultsPage />} />
+              <Route path="academic-domains" element={<AcademicDomainsPage />} />
+              <Route path="personalized" element={<PersonalizedInsightsPage />} />
+              <Route path="mindscope" element={<MindScopePage />} />
+              <Route path="hobbies" element={<HobbiesPage />} />
+              <Route path="hobbies/selected" element={<HobbiesSelectedPage />} />
+              <Route path="foundation-stage" element={<FoundationStagePage />} />
+              <Route path="foundation-stage/:moduleId" element={<FoundationModulePage />} />
+              <Route path="learning-analytics/:moduleId" element={<LearningModuleIntroPage />} />
               <Route path="themes" element={<ThemePage />} />
             </Routes>
           </Suspense>

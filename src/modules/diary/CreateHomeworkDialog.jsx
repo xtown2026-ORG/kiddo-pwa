@@ -18,7 +18,13 @@ import { getMyTeacherAssignments } from "../teacher-timetable/teacherTimetable.a
 import { createHomework } from "./diary.api";
 import DatePickerField from "../../components/DatePickerField";
 
-export default function CreateHomeworkDialog({ open, onClose, onSuccess }) {
+export default function CreateHomeworkDialog({
+    open,
+    onClose,
+    onSuccess,
+    prefill,
+    lockClassSection = false,
+}) {
     const { timetable } = useTeacherTimetable();
     const [assignments, setAssignments] = useState([]);
     const [assignmentsLoading, setAssignmentsLoading] = useState(false);
@@ -46,6 +52,22 @@ export default function CreateHomeworkDialog({ open, onClose, onSuccess }) {
             homework_date: getTomorrowDate(),
         }));
     }, [open]);
+
+    useEffect(() => {
+        if (!open || !prefill) return;
+        const classId = prefill?.class_id ?? prefill?.classId;
+        const sectionId = prefill?.section_id ?? prefill?.sectionId;
+        setFormData((prev) => ({
+            ...prev,
+            class_section:
+                classId && sectionId ? `${classId},${sectionId}` : prev.class_section,
+            subject_id: prefill?.subject_id ?? prefill?.subjectId ?? prev.subject_id,
+            teacher_assignment_id:
+                prefill?.teacher_assignment_id ??
+                prefill?.teacherAssignmentId ??
+                prev.teacher_assignment_id,
+        }));
+    }, [open, prefill]);
 
     useEffect(() => {
         if (!open) return;
@@ -223,7 +245,7 @@ export default function CreateHomeworkDialog({ open, onClose, onSuccess }) {
                             label="Class & Section"
                             value={formData.class_section}
                             onChange={handleChange}
-                            disabled={!classOptions.length}
+                            disabled={!classOptions.length || lockClassSection}
                         >
                             {classOptions.map((opt) => (
                                 <MenuItem

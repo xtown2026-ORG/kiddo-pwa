@@ -5,6 +5,7 @@ import { startClassSession, endClassSession, listClassSessions, markSessionAtten
 import { useAuth } from "../../../auth/AuthProvider";
 import { useTeacherTimetable } from "../../teacher-timetable/useTeacherTimetable";
 import DatePickerField from "../../../components/DatePickerField";
+import CreateHomeworkDialog from "../../diary/CreateHomeworkDialog";
 
 export default function ClassSessionPage() {
     const { user } = useAuth();
@@ -23,16 +24,51 @@ export default function ClassSessionPage() {
     const [attendanceSessionId, setAttendanceSessionId] = useState(null);
     const [attendanceError, setAttendanceError] = useState("");
     const [attendanceMessage, setAttendanceMessage] = useState("");
+    const [autoEndTriggered, setAutoEndTriggered] = useState(false);
+    const [homeworkPrompt, setHomeworkPrompt] = useState(null);
+    const [homeworkPromptOpen, setHomeworkPromptOpen] = useState(false);
+    const [homeworkDialogOpen, setHomeworkDialogOpen] = useState(false);
+    const [lastHomeworkSessionId, setLastHomeworkSessionId] = useState(null);
+    const promptHomeworkForSession = createHomeworkPrompter(
+        setHomeworkPrompt,
+        setHomeworkPromptOpen,
+        lastHomeworkSessionId,
+        setLastHomeworkSessionId
+    );
 
     // Timer effect
     useEffect(() => {
         let interval;
         if (activeSession) {
             interval = setInterval(() => {
+                const sessionStart =
+                    activeSession?.startTime ||
+                    (activeSession?.started_at ? new Date(activeSession.started_at) : null);
+                const scheduledEnd = resolveScheduledEnd(activeSession);
+                if (sessionStart && scheduledEnd) {
+                    const nowMs = Date.now();
+                    const endMs = scheduledEnd.getTime();
+                    if (nowMs >= endMs) {
+                        const maxElapsed = Math.max(0, Math.floor((endMs - sessionStart.getTime()) / 1000));
+                        setElapsedTime(maxElapsed);
+                        if (!autoEndTriggered && !loading) {
+                            setAutoEndTriggered(true);
+                            handleEndById(activeSession.id);
+                        }
+                        return;
+                    }
+                    const nextElapsed = Math.max(0, Math.floor((nowMs - sessionStart.getTime()) / 1000));
+                    setElapsedTime(nextElapsed);
+                    return;
+                }
                 setElapsedTime(prev => prev + 1);
             }, 1000);
         }
         return () => clearInterval(interval);
+    }, [activeSession, autoEndTriggered, loading]);
+
+    useEffect(() => {
+        if (!activeSession) setAutoEndTriggered(false);
     }, [activeSession]);
 
     useEffect(() => {
@@ -73,8 +109,12 @@ export default function ClassSessionPage() {
                         ...ongoing,
                         startTime: startedAt,
                     });
-                    const elapsed = Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000));
-                    setElapsedTime(elapsed);
+                    const scheduledEnd = resolveScheduledEnd(ongoing);
+                    const endMs = scheduledEnd?.getTime?.();
+                    const nowMs = Date.now();
+                    const baseElapsed = Math.max(0, Math.floor((nowMs - startedAt.getTime()) / 1000));
+                    const maxElapsed = endMs ? Math.max(0, Math.floor((endMs - startedAt.getTime()) / 1000)) : null;
+                    setElapsedTime(maxElapsed !== null ? Math.min(baseElapsed, maxElapsed) : baseElapsed);
                 }
             }
         } catch (err) {
@@ -88,21 +128,30 @@ export default function ClassSessionPage() {
     const handleStartClass = async (timetableEntry) => {
         try {
             setLoading(true);
+            const classId = resolveClassId(timetableEntry);
+            const sectionId = resolveSectionId(timetableEntry);
+            const subjectId = resolveSubjectId(timetableEntry);
+            const teacherAssignmentId = resolveTeacherAssignmentId(timetableEntry);
             const res = await startClassSession({
                 timetable_id: timetableEntry.id,
-                class_id: timetableEntry.class_id,
-                section_id: timetableEntry.section_id,
-                subject_id: timetableEntry.subject_id
+                teacher_assignment_id: teacherAssignmentId,
+                assignment_id: teacherAssignmentId,
+                class_id: classId,
+                section_id: sectionId,
+                subject_id: subjectId
             });
             const started = res.data?.data || res.data;
+            const startedSessionId = resolveSessionId(started) || resolveSessionId(res.data);
             setActiveSession({
                 ...timetableEntry,
                 ...started,
+                id: startedSessionId || started?.id || timetableEntry?.id,
                 startTime: new Date(started?.started_at || Date.now()),
             });
             setElapsedTime(0);
+            setAutoEndTriggered(false);
             fetchSessions();
-            openAttendance(started.id || started?.data?.id || started?.id, timetableEntry);
+            openAttendance(started, timetableEntry);
         } catch (err) {
             console.error("Failed to start class", err);
             // In a real app, show toast error
@@ -116,6 +165,7 @@ export default function ClassSessionPage() {
         try {
             setLoading(true);
             await endClassSession(activeSession.id);
+            promptHomeworkForSession(activeSession);
             setActiveSession(null);
             setElapsedTime(0);
             fetchSessions();
@@ -131,6 +181,10 @@ export default function ClassSessionPage() {
         try {
             setLoading(true);
             await endClassSession(sessionId);
+            const endedSession =
+                sessions.find((s) => resolveSessionId(s) === Number(sessionId)) ||
+                (activeSession?.id === sessionId ? activeSession : null);
+            if (endedSession) promptHomeworkForSession(endedSession);
             if (activeSession?.id === sessionId) {
                 setActiveSession(null);
                 setElapsedTime(0);
@@ -143,14 +197,35 @@ export default function ClassSessionPage() {
         }
     };
 
-    const openAttendance = async (sessionId, timetableEntry) => {
-        if (!sessionId || !timetableEntry) return;
+    const openAttendance = async (sessionOrId, timetableEntry) => {
+        const normalizedSessionId = resolveSessionId(sessionOrId);
+        if (!normalizedSessionId || !timetableEntry) return;
+        const sessionObj =
+            typeof sessionOrId === "object"
+                ? sessionOrId
+                : sessions.find((s) => resolveSessionId(s) === normalizedSessionId) ||
+                  (activeSession?.id === normalizedSessionId ? activeSession : null);
+        const sessionExpired = isSessionExpiredByTime(sessionObj, timetableEntry);
+        if (sessionExpired) {
+            setAttendanceError("Attendance window closed (45 minutes passed).");
+            setAttendanceStudents([]);
+            setAttendanceOpen(true);
+            return;
+        }
+        const classId = resolveClassId(timetableEntry);
+        const sectionId = resolveSectionId(timetableEntry);
+        if (!classId || !sectionId) {
+            setAttendanceError("Class or section is missing for this timetable entry.");
+            setAttendanceStudents([]);
+            setAttendanceOpen(true);
+            return;
+        }
         try {
             setAttendanceError("");
             setAttendanceMessage("");
             setAttendanceOpen(true);
-            setAttendanceSessionId(Number(sessionId));
-            const res = await listStudentsBySection(timetableEntry.class_id, timetableEntry.section_id);
+            setAttendanceSessionId(normalizedSessionId);
+            const res = await listStudentsBySection(classId, sectionId);
             const students = res.data?.items || res.data || [];
             const unique = new Map();
             for (const s of students) {
@@ -312,6 +387,11 @@ export default function ClassSessionPage() {
                     const matchingSession = todaySessions.find(
                         (s) => s.timetable_id == entry.id && !s.ended_at
                     );
+                    const activeSessionForEntry =
+                        activeSession && activeSession.timetable_id == entry.id && !activeSession.ended_at
+                            ? activeSession
+                            : null;
+                    const currentSession = matchingSession || activeSessionForEntry;
                     const isFinished = todaySessions.some(
                         (s) =>
                             s.timetable_id == entry.id ||
@@ -329,7 +409,7 @@ export default function ClassSessionPage() {
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                         <Chip
                                             icon={<AccessTime sx={{ fontSize: 16 }} />}
-                                            label={`${entry.start_time} - ${entry.end_time}`}
+                                            label={`${entry.start_time} - ${formatTimeLabel(resolveEntryEndTime(entry) || entry.end_time)}`}
                                             size="small"
                                             variant="outlined"
                                         />
@@ -356,7 +436,8 @@ export default function ClassSessionPage() {
                                             activeSession ||
                                             entry.status === 'completed' ||
                                             loading ||
-                                            isFinished
+                                            isFinished ||
+                                            !canStartNow(entry)
                                         }
                                     >
                                         {isFinished ? "Finished" : "Start"}
@@ -368,23 +449,24 @@ export default function ClassSessionPage() {
                                             fullWidth
                                             startIcon={<Stop />}
                                             sx={{ mt: 1 }}
-                                            onClick={() => handleEndById(matchingSession.id)}
+                                            onClick={() => handleEndById(resolveSessionId(matchingSession))}
                                             disabled={loading}
                                         >
                                             End
                                         </Button>
                                     )}
-                                    {!activeSession && (
-                                        <Button
-                                            variant="text"
-                                            fullWidth
-                                            sx={{ mt: 1 }}
-                                            onClick={() => matchingSession && openAttendance(matchingSession.id, entry)}
-                                            disabled={!matchingSession}
-                                        >
-                                            {matchingSession ? "Mark Attendance" : "Attendance (start first)"}
-                                        </Button>
-                                    )}
+                                    <Button
+                                        variant="text"
+                                        fullWidth
+                                        sx={{ mt: 1 }}
+                                        onClick={() =>
+                                            currentSession &&
+                                            openAttendance(currentSession, entry)
+                                        }
+                                        disabled={!currentSession}
+                                    >
+                                        {currentSession ? "Mark Attendance" : "Attendance (start first)"}
+                                    </Button>
                                 </CardContent>
                             </Card>
                         </Grid>
@@ -512,7 +594,11 @@ export default function ClassSessionPage() {
                                     }}
                                 >
                                     {statusOptions.map((opt) => (
-                                        <ToggleButton key={opt.value} value={opt.value} sx={{ minWidth: 44 }}>
+                                        <ToggleButton
+                                            key={opt.value}
+                                            value={opt.value}
+                                            sx={getAttendanceStatusButtonSx(opt.value)}
+                                        >
                                             {opt.label}
                                         </ToggleButton>
                                     ))}
@@ -532,6 +618,40 @@ export default function ClassSessionPage() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <Dialog
+                open={homeworkPromptOpen}
+                onClose={() => setHomeworkPromptOpen(false)}
+                fullWidth
+                maxWidth="xs"
+            >
+                <DialogTitle sx={{ pb: 1 }}>Assign Homework?</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" color="text.secondary">
+                        {homeworkPrompt?.label || "Would you like to assign homework for this class?"}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setHomeworkPromptOpen(false)}>Skip</Button>
+                    <Button
+                        variant="contained"
+                        onClick={() => {
+                            setHomeworkPromptOpen(false);
+                            setHomeworkDialogOpen(true);
+                        }}
+                    >
+                        Assign
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <CreateHomeworkDialog
+                open={homeworkDialogOpen}
+                onClose={() => setHomeworkDialogOpen(false)}
+                onSuccess={() => setHomeworkDialogOpen(false)}
+                prefill={homeworkPrompt?.prefill}
+                lockClassSection
+            />
         </Container>
     );
 }
@@ -542,6 +662,35 @@ const statusOptions = [
     { value: "leave", label: "L" },
     { value: "on_duty", label: "OD" },
 ];
+
+function getAttendanceStatusButtonSx(status) {
+    return (theme) => {
+        const paletteMap = {
+            present: theme.palette.success,
+            absent: theme.palette.error,
+            leave: theme.palette.warning,
+            on_duty: theme.palette.info,
+        };
+
+        const palette = paletteMap[status] || theme.palette.primary;
+
+        return {
+            minWidth: status === "on_duty" ? 52 : 44,
+            color: palette.main,
+            borderColor: palette.main,
+            fontWeight: 700,
+            "&.Mui-selected": {
+                color: theme.palette.common.white,
+                backgroundColor: palette.main,
+                borderColor: palette.main,
+            },
+            "&.Mui-selected:hover": {
+                backgroundColor: palette.dark,
+                borderColor: palette.dark,
+            },
+        };
+    };
+}
 
 function resolveStudentId(student) {
     const rawId =
@@ -555,4 +704,142 @@ function resolveStudentId(student) {
 
     const normalized = Number.parseInt(rawId, 10);
     return Number.isFinite(normalized) ? normalized : null;
+}
+
+function resolveSessionId(session) {
+    const rawSessionId =
+        (typeof session === "object" ? session?.id : session) ??
+        session?.session_id ??
+        session?.teacher_class_session_id ??
+        session?.class_session_id;
+    const normalized = Number.parseInt(rawSessionId, 10);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+}
+
+function resolveClassId(entry) {
+    const raw = entry?.class_id ?? entry?.class?.id ?? entry?.Class?.id;
+    const normalized = Number.parseInt(raw, 10);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+}
+
+function resolveSectionId(entry) {
+    const raw = entry?.section_id ?? entry?.section?.id ?? entry?.Section?.id;
+    const normalized = Number.parseInt(raw, 10);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+}
+
+function resolveSubjectId(entry) {
+    const raw = entry?.subject_id ?? entry?.subject?.id ?? entry?.Subject?.id;
+    const normalized = Number.parseInt(raw, 10);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+}
+
+function resolveTeacherAssignmentId(entry) {
+    const raw =
+        entry?.teacher_assignment_id ??
+        entry?.assignment_id ??
+        entry?.teacherAssignmentId;
+    const normalized = Number.parseInt(raw, 10);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+}
+
+function resolveScheduledEnd(session) {
+    const base =
+        session?.startTime ||
+        (session?.started_at ? new Date(session.started_at) : new Date());
+    const startTime =
+        session?.start_time ??
+        session?.startTime ??
+        session?.timetable_start_time ??
+        session?.timetable?.start_time;
+    const start = startTime ? parseTimeOnDate(base, startTime) : base;
+    return start ? new Date(start.getTime() + SESSION_DURATION_MS) : null;
+}
+
+function parseTimeOnDate(baseDate, timeStr) {
+    if (!timeStr) return null;
+    const parts = String(timeStr).split(":").map((v) => Number.parseInt(v, 10));
+    if (!Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) return null;
+    const d = new Date(baseDate);
+    d.setHours(parts[0], parts[1], Number.isFinite(parts[2]) ? parts[2] : 0, 0);
+    return d;
+}
+
+const SESSION_DURATION_MS = 45 * 60 * 1000;
+
+function resolveEntryEndTime(entry) {
+    const startTime = entry?.start_time ?? entry?.startTime ?? entry?.timetable?.start_time;
+    if (!startTime) return null;
+    const base = new Date();
+    const start = parseTimeOnDate(base, startTime);
+    if (!start) return null;
+    return new Date(start.getTime() + SESSION_DURATION_MS);
+}
+
+function formatTimeLabel(dateOrTime) {
+    if (!dateOrTime) return "";
+    if (dateOrTime instanceof Date) {
+        return dateOrTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return String(dateOrTime);
+}
+
+function canStartNow(entry) {
+    const now = new Date();
+    const startTime = entry?.start_time ?? entry?.startTime ?? entry?.timetable?.start_time;
+    const start = startTime ? parseTimeOnDate(now, startTime) : null;
+    if (!start) return false;
+    const end = new Date(start.getTime() + SESSION_DURATION_MS);
+    return now >= start && now <= end;
+}
+
+function isSessionExpiredByTime(sessionObj, timetableEntry) {
+    const sessionStart = sessionObj?.started_at ? new Date(sessionObj.started_at) : null;
+    if (sessionStart) {
+        return Date.now() > sessionStart.getTime() + SESSION_DURATION_MS;
+    }
+    const startTime = timetableEntry?.start_time ?? timetableEntry?.timetable?.start_time;
+    if (!startTime) return false;
+    const start = parseTimeOnDate(new Date(), startTime);
+    if (!start) return false;
+    return Date.now() > start.getTime() + SESSION_DURATION_MS;
+}
+
+function promptHomeworkPayload(session) {
+    const classId = session?.class_id ?? session?.class?.id;
+    const sectionId = session?.section_id ?? session?.section?.id;
+    const subjectId = session?.subject_id ?? session?.subject?.id;
+    const assignmentId = session?.teacher_assignment_id ?? session?.teacherAssignmentId;
+    const className = session?.class?.class_name || session?.class?.name || session?.class_name;
+    const sectionName = session?.section?.name || session?.section_name;
+    const subjectName = session?.subject?.name || session?.subject_name;
+    const label = className || sectionName || subjectName
+        ? `Class ${className || ""} ${sectionName ? `- ${sectionName}` : ""}${subjectName ? ` • ${subjectName}` : ""}`
+        : "Would you like to assign homework for this class?";
+    return {
+        label,
+        prefill: {
+            class_id: classId,
+            section_id: sectionId,
+            subject_id: subjectId,
+            teacher_assignment_id: assignmentId,
+        },
+    };
+}
+
+function isSameSessionId(a, b) {
+    const na = Number.parseInt(a, 10);
+    const nb = Number.parseInt(b, 10);
+    return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+function createHomeworkPrompter(setHomeworkPrompt, setHomeworkPromptOpen, lastHomeworkSessionId, setLastHomeworkSessionId) {
+    return (session) => {
+        const sessionId = resolveSessionId(session);
+        if (!sessionId) return;
+        if (isSameSessionId(sessionId, lastHomeworkSessionId)) return;
+        setLastHomeworkSessionId(sessionId);
+        setHomeworkPrompt(promptHomeworkPayload(session));
+        setHomeworkPromptOpen(true);
+    };
 }

@@ -21,7 +21,9 @@ const ApprovalsPage = lazy(() => import("../modules/approvals/pages/ApprovalsPag
 const ExamCreationPage = lazy(() => import("../modules/exams/pages/ExamCreationPage"));
 const AssignedClassesPage = lazy(() => import("../modules/teacher-assignments/pages/AssignedClassesPage"));
 const ReportCardEntryPage = lazy(() => import("../modules/report-card/pages/ReportCardEntryPage"));
+const StudentsReportsPage = lazy(() => import("../modules/student-reports/pages/StudentsReportsPage"));
 const TeacherAIToolsPage = lazy(() => import("../modules/ai-tools/TeacherAIToolsPage"));
+const TeacherResultsPage = lazy(() => import("../modules/ai-tests/TeacherResultsPage"));
 const ThemePage = lazy(() => import("../modules/theme/ThemePage"));
 
 // Quiz pages
@@ -60,6 +62,8 @@ export default function TeacherApp() {
               <Route path="approvals" element={<ApprovalsPage />} />
               <Route path="exams/create" element={<ExamCreationPage />} />
               <Route path="assigned-classes" element={<AssignedClassesPage />} />
+              <Route path="results" element={<TeacherResultsPage />} />
+              <Route path="students-reports" element={<StudentsReportsPage />} />
               <Route path="report-cards/entry" element={<ReportCardEntryPage />} />
               <Route path="ai-tools" element={<TeacherAIToolsPage />} />
               <Route path="themes" element={<ThemePage />} />

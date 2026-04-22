@@ -44,8 +44,8 @@ export function setupAxiosInterceptors({ onLogout, onTokenRefresh }) {
       }
 
       // Add retry configuration to request
-      config.retryCount = config.retryCount || 0;
-      config.maxRetries = config.maxRetries || (import.meta.env.DEV ? 1 : 3);
+      config.retryCount = config.retryCount ?? 0;
+      config.maxRetries = config.maxRetries ?? (import.meta.env.DEV ? 1 : 3);
 
       return config;
     },

@@ -10,6 +10,9 @@ export const submitSingleQuiz = (payload) =>
 export const getQuizLeaderboard = (sessionId) =>
   api.get(`/game/quiz/${sessionId}/leaderboard`);
 
+export const getSingleQuizReview = (sessionId) =>
+  api.get(`/game/quiz/${sessionId}/review`);
+
 export const getQuizHistory = (params) =>
   api.get("/game/quiz/history", { params });
 
@@ -32,7 +35,15 @@ export const joinQuizSession = (sessionId) =>
 
 // AI generated quiz (topic -> questions)
 export const generateQuiz = (payload) =>
-  api.post("/quiz/generate", payload);
+  api.post("/quiz/generate", payload, {
+    maxRetries: 0,
+    timeout: 30000,
+  });
+
+export const generateQuestionBankQuiz = (payload) =>
+  api.post("/question-bank/generate", payload, {
+    timeout: 30000,
+  });
 
 // Optional: legacy hook support
 export const getQuizQuestions = (params) => {

@@ -29,12 +29,19 @@ export function usePwaInstall() {
       setPrompt(null);
     };
 
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleDisplayModeChange = () => {
+      checkInstallation();
+    };
+
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", handleAppInstalled);
+    mediaQuery.addEventListener?.("change", handleDisplayModeChange);
     
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
       window.removeEventListener("appinstalled", handleAppInstalled);
+      mediaQuery.removeEventListener?.("change", handleDisplayModeChange);
     };
   }, []);
 

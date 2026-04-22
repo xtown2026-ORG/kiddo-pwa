@@ -8,6 +8,11 @@ import {
   Close,
   Palette,
   Logout,
+  School,
+  Insights,
+  Assessment,
+  Interests,
+  Psychology,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -17,12 +22,16 @@ export default function StudentSidebar({ open, onClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const studentBase = location.pathname.startsWith("/students") ? "/students" : "/student";
-
   const menuItems = [
     { label: "Attendance", icon: <FactCheck />, path: `${studentBase}/attendance` },
     { label: "Diary", icon: <Book />, path: `${studentBase}/diary` },
     { label: "Report Cards", icon: <ReceiptLong />, path: `${studentBase}/report-cards` },
     { label: "Quiz", icon: <Quiz />, path: `${studentBase}/quiz` },
+    { label: "Results", icon: <Assessment />, path: `${studentBase}/results` },
+    { label: "Academic Domains", icon: <School />, path: `${studentBase}/academic-domains` },
+    { label: "Personalized", icon: <Insights />, path: `${studentBase}/personalized` },
+    { label: "MindScope", icon: <Psychology />, path: `${studentBase}/mindscope` },
+    { label: "Hobbies", icon: <Interests />, path: `${studentBase}/hobbies` },
     { label: "Themes", icon: <Palette />, path: `${studentBase}/themes` },
     { label: "Profile", icon: <Person />, path: `${studentBase}/profile` },
   ];
@@ -43,7 +52,15 @@ export default function StudentSidebar({ open, onClose }) {
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: 280, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 } }}
+      PaperProps={{
+        sx: {
+          width: 280,
+          borderTopLeftRadius: 16,
+          borderBottomLeftRadius: 16,
+          display: "flex",
+          flexDirection: "column",
+        }
+      }}
     >
       <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Typography variant="h6" fontWeight="bold">Menu</Typography>
@@ -64,7 +81,7 @@ export default function StudentSidebar({ open, onClose }) {
 
       <Divider />
 
-      <List>
+      <List sx={{ flexGrow: 1 }}>
         {menuItems.map((item) => (
           <ListItem key={item.label} disablePadding>
             <ListItemButton onClick={() => handleNavigate(item.path)}>
@@ -89,6 +106,15 @@ export default function StudentSidebar({ open, onClose }) {
           </ListItemButton>
         </ListItem>
       </List>
+
+      <Box sx={{ px: 2, pb: 2, pt: 1, display: "flex", justifyContent: "center" }}>
+        <Box
+          component="img"
+          src="/xtown%20logo1.jpg"
+          alt="xtown logo"
+          sx={{ width: 120, maxWidth: "100%", height: "auto", objectFit: "contain" }}
+        />
+      </Box>
     </Drawer>
   );
 }

@@ -36,6 +36,7 @@ export default function TeacherDashboard() {
         pendingReportCards: dashboard?.pending_report_cards ?? 0,
         classes: classCountFromDashboard || uniqueAssignedClasses,
         aiTokens: dashboard?.ai_tokens ?? { remaining: 0, used: 0, total: 0 },
+        assignedTests: dashboard?.assigned_tests ?? { total: 0, pending: 0 },
       });
     } catch {
       setData({
@@ -44,6 +45,7 @@ export default function TeacherDashboard() {
         pendingReportCards: 0,
         classes: 0,
         aiTokens: { remaining: 0, used: 0, total: 0 },
+        assignedTests: { total: 0, pending: 0 },
       });
     }
   }
@@ -59,6 +61,10 @@ export default function TeacherDashboard() {
       <KpiCard
         title="AI Tokens"
         value={`${data.aiTokens.remaining}/${data.aiTokens.total}`}
+      />
+      <KpiCard
+        title="Assigned Tests"
+        value={`${data.assignedTests.total}/${data.assignedTests.pending}`}
       />
       <Grid item xs={12}>
         <TeacherUpcomingClasses />

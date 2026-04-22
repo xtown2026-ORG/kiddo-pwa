@@ -38,7 +38,7 @@ export default function App() {
 
   return (
     <ErrorBoundary fallback={<div>Something went wrong</div>}>
-      {location.pathname !== "/login" && <PWAStatus />}
+      <PWAStatus />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Navigate to={roleDashboardPath} replace />} />

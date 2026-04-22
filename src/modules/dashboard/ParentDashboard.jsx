@@ -1,4 +1,4 @@
-import { Container, Typography, Grid, Box } from "@mui/material";
+import { Container, Grid } from "@mui/material";
 import DashboardCard from "./DashboardCard";
 
 export default function ParentDashboard({ data }) {
@@ -9,7 +9,6 @@ export default function ParentDashboard({ data }) {
   const paymentSummary = data?.paymentSummary?.totals || {};
 
   const metrics = data?.metrics || firstChild?.metrics || {
-    attendance: { percentage: 0 },
     homework_pending: 0,
     exams_upcoming: 0,
     notifications_unread: unreadNotifications,
@@ -25,8 +24,9 @@ export default function ParentDashboard({ data }) {
       <Grid container spacing={2}>
         <Grid item xs={6}>
           <DashboardCard
-            title="Attendance"
-            value={`${metrics.attendance.percentage}%`}
+            title="Payments Bill"
+            value={paymentSummary.totalDue ?? 0}
+            subtitle="Total Due"
           />
         </Grid>
 

@@ -1,7 +1,7 @@
-import { Box, Typography, Card, CardContent, Button, Avatar, Chip, Container, Stack, Divider, CircularProgress, Alert } from "@mui/material";
+import { Box, Typography, Card, CardContent, Button, Avatar, Chip, Container, Stack, Divider, CircularProgress, Alert, Tabs, Tab } from "@mui/material";
 import { Check, Close } from "@mui/icons-material";
-import { useState, useEffect } from "react";
-import { getTeacherPendingApprovals, approveRequest } from "../approvals.api";
+import { useState, useEffect, useMemo } from "react";
+import { getTeacherPendingApprovals, approveRequest, approveParentRequest } from "../approvals.api";
 
 const detailFields = [
     "username",
@@ -22,7 +22,9 @@ const detailFields = [
 ];
 
 export default function ApprovalsPage() {
-    const [requests, setRequests] = useState([]);
+    const [studentRequests, setStudentRequests] = useState([]);
+    const [parentRequests, setParentRequests] = useState([]);
+    const [activeTab, setActiveTab] = useState("students");
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
     const [actionError, setActionError] = useState("");
@@ -31,8 +33,54 @@ export default function ApprovalsPage() {
         try {
             setLoading(true);
             const res = await getTeacherPendingApprovals();
-            const items = res.data?.items ?? res.data ?? [];
-            setRequests(Array.isArray(items) ? items : []);
+            const payload = res?.data ?? res ?? {};
+            const data = payload?.data ?? payload;
+
+            const items = data?.items ?? [];
+            const students =
+                data?.students?.items ??
+                data?.students?.rows ??
+                data?.students ??
+                data?.pending_students?.items ??
+                data?.pending_students ??
+                data?.student_requests ??
+                data?.student_approvals ??
+                data?.studentApprovals ??
+                (Array.isArray(items) ? items : []);
+
+            const parents =
+                data?.parents?.items ??
+                data?.parents?.rows ??
+                data?.parents ??
+                data?.pending_parents?.items ??
+                data?.pending_parents ??
+                data?.parent_requests ??
+                data?.parent_approvals ??
+                data?.parentApprovals ??
+                [];
+
+            const normalizedStudents = Array.isArray(students) ? students : [];
+            const normalizedParents = Array.isArray(parents) ? parents : [];
+
+            if (normalizedParents.length === 0 && Array.isArray(items)) {
+                const split = items.reduce(
+                    (acc, item) => {
+                        const typeHint = String(item?.type || item?.profile_type || item?.request_type || "").toLowerCase();
+                        const isParent =
+                            typeHint.includes("parent") ||
+                            Boolean(item?.parent_id || item?.parent || item?.relation_type);
+                        if (isParent) acc.parents.push(item);
+                        else acc.students.push(item);
+                        return acc;
+                    },
+                    { students: [], parents: [] }
+                );
+                setStudentRequests(normalizedStudents.length ? normalizedStudents : split.students);
+                setParentRequests(normalizedParents.length ? normalizedParents : split.parents);
+            } else {
+                setStudentRequests(normalizedStudents);
+                setParentRequests(normalizedParents);
+            }
         } catch (err) {
             console.error("Failed to load approvals", err);
         } finally {
@@ -44,18 +92,56 @@ export default function ApprovalsPage() {
         fetchApprovals();
     }, []);
 
-const handleAction = async (type, id, action) => {
+    const handleAction = async (type, id, action) => {
         try {
             setActionError("");
-            await approveRequest(type, id, action);
-            // Optimistic update
-            setRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
+            if (type === "parent_profile") {
+                await approveParentRequest(id, action);
+                setParentRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
+            } else {
+                await approveRequest(type, id, action);
+                setStudentRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
+            }
             if (expandedId === Number(id)) setExpandedId(null);
         } catch (err) {
             console.error(`Failed to ${action} request`, err);
             setActionError(err?.response?.data?.message || err?.message || `Failed to ${action} request`);
         }
     };
+
+    const sortApprovalsAscending = useMemo(
+        () => (items) =>
+            [...items].sort((left, right) => {
+                const leftName =
+                    left?.user?.name ||
+                    left?.student?.user?.name ||
+                    left?.student?.name ||
+                    left?.name ||
+                    left?.user?.username ||
+                    left?.student?.user?.username ||
+                    left?.username ||
+                    "";
+                const rightName =
+                    right?.user?.name ||
+                    right?.student?.user?.name ||
+                    right?.student?.name ||
+                    right?.name ||
+                    right?.user?.username ||
+                    right?.student?.user?.username ||
+                    right?.username ||
+                    "";
+
+                return String(leftName).localeCompare(String(rightName), undefined, {
+                    numeric: true,
+                    sensitivity: "base",
+                });
+            }),
+        []
+    );
+
+    const requests = activeTab === "students"
+        ? sortApprovalsAscending(studentRequests)
+        : sortApprovalsAscending(parentRequests);
 
     if (loading) return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
 
@@ -66,8 +152,27 @@ const handleAction = async (type, id, action) => {
                     Pending Approvals
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
-                    Review requests from your students
+                    Review student and parent requests (class teacher scope)
                 </Typography>
+            </Box>
+            <Box sx={{ mb: 2 }}>
+                <Tabs
+                    value={activeTab}
+                    onChange={(_, value) => {
+                        setActiveTab(value);
+                        setExpandedId(null);
+                    }}
+                    variant="fullWidth"
+                >
+                    <Tab
+                        value="students"
+                        label={`Students (${studentRequests.length})`}
+                    />
+                    <Tab
+                        value="parents"
+                        label={`Parents (${parentRequests.length})`}
+                    />
+                </Tabs>
             </Box>
             {actionError ? (
                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError("")}>
@@ -79,13 +184,17 @@ const handleAction = async (type, id, action) => {
                 <Box sx={{ textAlign: 'center', py: 8, bgcolor: 'background.paper', borderRadius: 2 }}>
                     <Check sx={{ fontSize: 60, color: 'success.light', mb: 2 }} />
                     <Typography variant="h6">All caught up!</Typography>
-                    <Typography color="text.secondary">No pending requests to review.</Typography>
+                    <Typography color="text.secondary">
+                        No pending {activeTab} requests to review.
+                    </Typography>
                 </Box>
             ) : (
                 <Stack spacing={2}>
                     {requests.map((req) => {
                         const approvalId = resolveApprovalId(req);
+                        const parentId = resolveParentId(req);
                         const isExpanded = expandedId === approvalId;
+                        const isParentTab = activeTab === "parents";
                         const rawName =
                             req.user?.name ||
                             req.student?.user?.name ||
@@ -97,10 +206,16 @@ const handleAction = async (type, id, action) => {
                             req.student?.user?.username ||
                             req.username ||
                             "";
-                        const name =
-                            rawName && rawName.trim().toLowerCase() !== "student"
-                                ? rawName
-                                : username || "Student";
+                        const invalidName = (value) => {
+                            const v = String(value || "").trim();
+                            if (!v) return true;
+                            if (/^student$/i.test(v)) return true;
+                            if (/^user\s*#?/i.test(v)) return true;
+                            return false;
+                        };
+                        const name = !invalidName(rawName)
+                            ? rawName
+                            : (username || "Student");
                         const initial = name?.[0] || "U";
                         const className =
                             req.class?.class_name ||
@@ -133,10 +248,12 @@ const handleAction = async (type, id, action) => {
                                             <Typography variant="h6">
                                                 {name}
                                             </Typography>
-                                            <Chip label={req.type || "Profile Update"} size="small" color="info" variant="outlined" />
+                                            <Chip label={isParentTab ? "Parent Profile" : (req.type || "Profile Update")} size="small" color="info" variant="outlined" />
                                         </Box>
                                         <Typography variant="body2" color="text.secondary">
-                                            Class {className} - {sectionName}
+                                            {isParentTab
+                                              ? `${req.relation_type || "Parent"} • Class ${className} - ${sectionName}`
+                                              : `Class ${className} - ${sectionName}`}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary">
                                             {requestedText}
@@ -199,7 +316,7 @@ const handleAction = async (type, id, action) => {
                                         variant="outlined"
                                         color="error"
                                         startIcon={<Close />}
-                                        onClick={(e) => { e.stopPropagation(); handleAction('student_profile', approvalId, 'reject'); }}
+                                        onClick={(e) => { e.stopPropagation(); handleAction(isParentTab ? 'parent_profile' : 'student_profile', isParentTab ? parentId : approvalId, 'reject'); }}
                                       >
                                         Reject
                                       </Button>
@@ -207,7 +324,7 @@ const handleAction = async (type, id, action) => {
                                         variant="contained"
                                         color="success"
                                         startIcon={<Check />}
-                                        onClick={(e) => { e.stopPropagation(); handleAction('student_profile', approvalId, 'approve'); }}
+                                        onClick={(e) => { e.stopPropagation(); handleAction(isParentTab ? 'parent_profile' : 'student_profile', isParentTab ? parentId : approvalId, 'approve'); }}
                                       >
                                         Approve
                                       </Button>
@@ -226,7 +343,27 @@ const handleAction = async (type, id, action) => {
 }
 
 function resolveApprovalId(req) {
-    const raw = req?.id ?? req?.student_id ?? req?.student?.id ?? req?.user_id ?? req?.user?.id;
+    const raw =
+        req?.approval_id ??
+        req?.request_id ??
+        req?.id ??
+        req?.student_id ??
+        req?.student?.id ??
+        req?.user_id ??
+        req?.user?.id ??
+        req?.parent_id ??
+        req?.parent?.id;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveParentId(req) {
+    const raw =
+        req?.parent_id ??
+        req?.parent?.id ??
+        req?.user_id ??
+        req?.user?.id ??
+        req?.id;
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : null;
 }

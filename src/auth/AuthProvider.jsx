@@ -107,6 +107,16 @@ export function AuthProvider({ children }) {
             name: normalized?.name ?? prev?.name,
             phone: normalized?.phone ?? prev?.phone,
             email: normalized?.email ?? prev?.email,
+            class_id: normalized?.class_id ?? prev?.class_id,
+            section_id: normalized?.section_id ?? prev?.section_id,
+            class_name:
+              normalized?.class?.class_name ??
+              normalized?.Class?.class_name ??
+              prev?.class_name,
+            section_name:
+              normalized?.section?.name ??
+              normalized?.Section?.name ??
+              prev?.section_name,
             avatar_url: avatarUrl || prev?.avatar_url || "",
             first_login:
               typeof normalized?.first_login === "boolean"

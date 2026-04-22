@@ -23,7 +23,7 @@ import { usePwaInstall } from '../pwa/usePwaInstall';
 import { offlineManager, updateServiceWorker } from '../pwa/serviceWorker';
 
 export default function PWAStatus() {
-  const { canInstall, install } = usePwaInstall();
+  const { canInstall, isInstalled, install } = usePwaInstall();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
@@ -66,7 +66,7 @@ export default function PWAStatus() {
     window.addEventListener('pwa-notification', handlePWANotification);
 
     // Show install prompt after a delay if installable
-    if (canInstall) {
+    if (canInstall && !isInstalled) {
       const timer = setTimeout(() => {
         setShowInstallPrompt(true);
       }, 5000); // Show after 5 seconds
@@ -82,15 +82,17 @@ export default function PWAStatus() {
       unsubscribe();
       window.removeEventListener('pwa-notification', handlePWANotification);
     };
-  }, [canInstall]);
+  }, [canInstall, isInstalled]);
 
   const handleInstall = async () => {
     try {
-      await install();
+      const installed = await install();
       setShowInstallPrompt(false);
       setNotification({
-        message: 'App installed successfully!',
-        severity: 'success'
+        message: installed
+          ? 'Kiddos app install started successfully.'
+          : 'Install prompt dismissed. You can install it later from the browser menu.',
+        severity: installed ? 'success' : 'info'
       });
     } catch (error) {
       console.error('Installation failed:', error);
@@ -123,7 +125,7 @@ export default function PWAStatus() {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <InstallIcon color="primary" />
-          Install PWA Kiddo
+          Install Kiddos PWA
           <IconButton
             onClick={() => setShowInstallPrompt(false)}
             sx={{ ml: 'auto' }}
@@ -133,7 +135,7 @@ export default function PWAStatus() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1" gutterBottom>
-            Install PWA Kiddo on your device for a better experience:
+            Install Kiddos PWA on your device for a better experience:
           </Typography>
           <Box component="ul" sx={{ mt: 2, pl: 2 }}>
             <Typography component="li" variant="body2">
@@ -177,7 +179,7 @@ export default function PWAStatus() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1">
-            A new version of PWA Kiddo is available. Update now to get the latest features and improvements.
+            A new version of Kiddos PWA is available. Update now to get the latest features and improvements.
           </Typography>
         </DialogContent>
         <DialogActions>

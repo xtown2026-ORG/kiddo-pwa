@@ -415,7 +415,6 @@ export default function FirstLoginPage() {
                     pattern: "[0-9]*",
                     maxLength: PHONE_MAX_LENGTH,
                   }}
-                  helperText={isStudent ? "You can use the same phone number as your parent account." : undefined}
                 />
 
                 <TextField

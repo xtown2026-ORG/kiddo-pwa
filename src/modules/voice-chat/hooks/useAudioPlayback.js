@@ -5,8 +5,8 @@ export function useAudioPlayback() {
   const audioUrlRef = useRef(null);
   const [playing, setPlaying] = useState(false);
 
-  async function play(buffer) {
-    if (!buffer) return;
+  async function play(audioData) {
+    if (!audioData) return;
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -18,7 +18,10 @@ export function useAudioPlayback() {
       audioUrlRef.current = null;
     }
 
-    const blob = new Blob([buffer], { type: "audio/wav" });
+    const blob =
+      audioData instanceof Blob
+        ? audioData
+        : new Blob([audioData], { type: "audio/wav" });
     const url = URL.createObjectURL(blob);
     audioUrlRef.current = url;
 

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import { getMyProfile } from "../modules/profile/profile.api";
 
-const APPROVAL_ROLES = ["teacher", "student"];
+const APPROVAL_ROLES = ["teacher", "student", "parent"];
 
 export default function RequireApproval({ children }) {
   const { user, loading, updateUser } = useAuth();
@@ -83,17 +83,9 @@ export default function RequireApproval({ children }) {
   }
 
   if (profileGate.approvalStatus !== "approved") {
-    const roleProfilePath = user?.role ? `/${user.role}/profile` : null;
-    const roleDashboardPath = user?.role ? `/${user.role}/dashboard` : null;
-    const isProfileRoute = roleProfilePath
-      ? location.pathname.startsWith(roleProfilePath)
-      : false;
-    const isDashboardRoute = roleDashboardPath
-      ? location.pathname.startsWith(roleDashboardPath)
-      : false;
     const isApprovalRoute = location.pathname.startsWith("/approval-pending");
 
-    if (!isProfileRoute && !isDashboardRoute && !isApprovalRoute) {
+    if (!isApprovalRoute) {
       return (
         <Navigate to="/approval-pending" state={{ from: location }} replace />
       );

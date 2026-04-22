@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
+  Alert,
   Container,
   Button,
   Typography,
@@ -11,100 +12,170 @@ import {
   LinearProgress,
   Stack
 } from "@mui/material";
-import { EmojiEvents, School } from "@mui/icons-material";
-import { generateQuiz, startSingleQuiz, submitSingleQuiz } from "../api/quiz.api";
+import { School } from "@mui/icons-material";
+import { generateQuestionBankQuiz, generateQuiz, startSingleQuiz, submitSingleQuiz } from "../api/quiz.api";
 import QuestionCard from "../components/QuestionCard";
 import { useAuth } from "../../../auth/AuthProvider";
+import { getErrorMessage } from "../../../utils/apiErrorHandler";
 
 export default function SinglePlayerQuizPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [gameState, setGameState] = useState("setup"); // setup, loading, playing, result
-  const [topic, setTopic] = useState("");
+  const location = useLocation();
+  const autoStartedRef = useRef(false);
+  const questionBankConfig = location.state?.questionBankConfig || null;
+  const prefilledTopic = String(location.state?.prefilledTopic || "").trim();
+  const isAcademicDomainsFlow = questionBankConfig?.source === "academic-domains";
+  const [gameState, setGameState] = useState("setup"); // setup, loading, playing
+  const [topic, setTopic] = useState(
+    questionBankConfig?.exam ? `${questionBankConfig.exam} Practice` : prefilledTopic
+  );
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [score, setScore] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [playerId, setPlayerId] = useState(null);
   const [answers, setAnswers] = useState([]);
+  const [quizMeta, setQuizMeta] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Setup Phase: Start Quiz
   async function handleStart() {
-    if (!topic.trim()) return;
+    const normalizedTopic = String(topic || "").trim();
+    if (!questionBankConfig?.exam && !normalizedTopic) return;
+
+    setErrorMessage("");
     setGameState("loading");
     try {
-      const res = await generateQuiz({
-        topic,
-        classLevel: user?.class_level || 5,
-        difficulty: "MEDIUM",
-        numQuestions: 5,
-      });
+      const res = questionBankConfig?.exam
+        ? await generateQuestionBankQuiz({
+              exam: questionBankConfig.exam,
+              numQuestions: questionBankConfig.numQuestions || 10,
+              totalMarks: questionBankConfig.totalMarks,
+              aiMode: questionBankConfig.aiMode,
+              subject: questionBankConfig.subject,
+            })
+        : await generateQuiz({
+            topic: normalizedTopic,
+            classLevel: user?.class_level || 5,
+            difficulty: "MEDIUM",
+            numQuestions: 5,
+          });
 
       const quizData = res.data?.questions || [];
 
       if (quizData.length > 0) {
         const startRes = await startSingleQuiz({
           quizId: res.data?.quizId,
-          timeLimitMinutes: 5,
+          timeLimitMinutes: questionBankConfig?.timeLimitMinutes || 5,
         });
         setSessionId(startRes.data?.sessionId || null);
         setPlayerId(startRes.data?.playerId || null);
         setQuestions(quizData);
+        setQuizMeta({
+          exam: questionBankConfig?.exam || res.data?.exam || null,
+          totalMarks: questionBankConfig?.totalMarks || res.data?.totalMarks || null,
+          marksPerQuestion: questionBankConfig?.marksPerQuestion || res.data?.marksPerQuestion || null,
+          source: questionBankConfig?.source || location.state?.source || null,
+        });
         setAnswers([]);
-        setScore(0);
         setCurrentIndex(0);
         setGameState("playing");
         setSelectedIndex(null);
       } else {
-        alert("Could not generate questions. AI response was invalid.");
+        setErrorMessage("Gemini did not return a playable quiz. Please try a clearer topic.");
         setGameState("setup");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to start quiz.");
+      setErrorMessage(getErrorMessage(err) || "Failed to start quiz.");
       setGameState("setup");
     }
   }
 
-  // Playing Phase: Submit Answer
-  async function handleAnswer(selectedIndex) {
-    if (selectedIndex === null || selectedIndex === undefined) return;
-    setSelectedIndex(selectedIndex);
+  async function handleSelectAnswer(answerIndex) {
+    if (answerIndex === null || answerIndex === undefined || isSubmitting || selectedIndex !== null) return;
+    setErrorMessage("");
+    setIsSubmitting(true);
     const currentQ = questions[currentIndex];
-    const isCorrect = selectedIndex === currentQ.correct_option_index;
+
+    if (!currentQ?.id) {
+      setErrorMessage("This question could not be submitted. Please restart the quiz.");
+      setGameState("setup");
+      setIsSubmitting(false);
+      return;
+    }
+
+    setSelectedIndex(answerIndex);
     const nextAnswers = [
       ...answers,
-      { questionId: currentQ.id, selectedIndex },
+      { questionId: currentQ.id, selectedIndex: answerIndex },
     ];
     setAnswers(nextAnswers);
 
-    if (isCorrect) setScore(s => s + 1);
+    const isLastQuestion = currentIndex >= questions.length - 1;
 
-    // Wait a moment then move to next
-    setTimeout(async () => {
-      if (currentIndex < questions.length - 1) {
-        setCurrentIndex(p => p + 1);
+    window.setTimeout(async () => {
+      if (!isLastQuestion) {
+        setCurrentIndex((prev) => prev + 1);
         setSelectedIndex(null);
-      } else {
-        try {
-          if (playerId) {
-            const submitRes = await submitSingleQuiz({
-              playerId,
-              answers: nextAnswers,
-            });
-            if (submitRes?.data?.score !== undefined) {
-              setScore(submitRes.data.score);
-            }
-          }
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setGameState("result");
-        }
+        setIsSubmitting(false);
+        return;
       }
-    }, 1000);
+
+      try {
+        let submitResult = null;
+        if (playerId) {
+          const submitRes = await submitSingleQuiz({
+            playerId,
+            answers: nextAnswers,
+          });
+          submitResult = submitRes?.data || null;
+        }
+
+        if (sessionId) {
+          navigate(`/student/quiz/${sessionId}/results`, {
+            state: {
+              backTo: isAcademicDomainsFlow ? "/student/academic-domains" : "/student/quiz",
+              backLabel: isAcademicDomainsFlow ? "Back to Academic Domains" : "Back to Quiz Menu",
+              singleQuizReview: {
+                ...submitResult,
+                questionBank: submitResult?.questionBank || (quizMeta?.exam ? quizMeta : null),
+                backTo: isAcademicDomainsFlow ? "/student/academic-domains" : "/student/quiz",
+                backLabel: isAcademicDomainsFlow ? "Back to Academic Domains" : "Back to Quiz Menu",
+              },
+            },
+          });
+          return;
+        }
+
+        setGameState("setup");
+        setIsSubmitting(false);
+      } catch (err) {
+        console.error(err);
+        setErrorMessage(getErrorMessage(err) || "Failed to submit quiz.");
+        setGameState("setup");
+        setIsSubmitting(false);
+      }
+    }, 500);
   }
+
+  useEffect(() => {
+    if (!prefilledTopic) return;
+    if (questionBankConfig?.exam) return;
+    setTopic(prefilledTopic);
+  }, [prefilledTopic, questionBankConfig?.exam]);
+
+  useEffect(() => {
+    if (gameState !== "setup") return;
+    if (!location.state?.autoStart) return;
+    if (!questionBankConfig?.exam && !prefilledTopic) return;
+    if (autoStartedRef.current) return;
+
+    autoStartedRef.current = true;
+    handleStart();
+  }, [gameState, location.state, prefilledTopic, questionBankConfig?.exam]);
 
   if (user?.role === "teacher") {
     return (
@@ -131,29 +202,42 @@ export default function SinglePlayerQuizPage() {
         <Paper sx={{ p: 4, borderRadius: 4 }}>
           <School sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            AI Quiz Master
+            {questionBankConfig?.exam ? `${questionBankConfig.exam} Question Paper` : "Gemini Quiz Practice"}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-            Enter a topic and I will generate a quiz for you!
+            {questionBankConfig?.exam
+              ? `${questionBankConfig?.totalMarks || 0} marks paper with ${questionBankConfig?.marksPerQuestion || 1} mark(s) per question and ${questionBankConfig?.timeLimitMinutes || 10} minute(s).`
+              : location.state?.source === "ai-chat"
+              ? "A quiz topic was picked from your AI chat automatically."
+              : "Enter a topic and generate a smooth Gemini-powered quiz."}
           </Typography>
 
-          <TextField
-            label="Quiz Topic (e.g. Solar System)"
-            fullWidth
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            sx={{ mb: 3 }}
-          />
+          {errorMessage && (
+            <Alert severity="error" sx={{ mb: 3, textAlign: "left" }}>
+              {errorMessage}
+            </Alert>
+          )}
+
+          {!questionBankConfig?.exam && (
+            <TextField
+              label="Quiz Topic (e.g. Solar System)"
+              fullWidth
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              helperText="Use a clear topic like Fractions, Human Digestive System, or Indian Freedom Movement."
+              sx={{ mb: 3 }}
+            />
+          )}
 
           <Button
             variant="contained"
             fullWidth
             size="large"
             onClick={handleStart}
-            disabled={!topic.trim()}
+            disabled={!questionBankConfig?.exam && !topic.trim()}
             sx={{ borderRadius: 2 }}
           >
-            Start Quiz
+            {questionBankConfig?.exam ? "Start Question Paper" : "Start Quiz"}
           </Button>
         </Paper>
       </Container>
@@ -165,41 +249,8 @@ export default function SinglePlayerQuizPage() {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 10 }}>
         <CircularProgress size={60} thickness={4} />
-        <Typography sx={{ mt: 3, fontWeight: 500 }}>Generating Questions...</Typography>
+        <Typography sx={{ mt: 3, fontWeight: 500 }}>Generating questions with Gemini...</Typography>
       </Box>
-    );
-  }
-
-  // Render Result
-  if (gameState === "result") {
-    const percentage = Math.round((score / questions.length) * 100);
-    return (
-      <Container maxWidth="xs" sx={{ mt: 8, textAlign: 'center' }}>
-        <Paper sx={{ p: 4, borderRadius: 4 }}>
-          <EmojiEvents sx={{ fontSize: 80, color: '#FFD700', mb: 2 }} />
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            {score} / {questions.length}
-          </Typography>
-          <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
-            You scored {percentage}%
-          </Typography>
-
-          <Button
-            variant="contained"
-            onClick={() => {
-              setGameState("setup");
-              setCurrentIndex(0);
-              setScore(0);
-              setTopic("");
-              setAnswers([]);
-              setSessionId(null);
-              setPlayerId(null);
-            }}
-          >
-            Play Again
-          </Button>
-        </Paper>
-      </Container>
     );
   }
 
@@ -211,11 +262,22 @@ export default function SinglePlayerQuizPage() {
         <Typography align="right" variant="caption">
           Question {currentIndex + 1} of {questions.length}
         </Typography>
+        {quizMeta?.exam && (
+          <Typography align="right" variant="caption" color="text.secondary">
+            {quizMeta.exam} - {quizMeta.totalMarks || 0} marks - {quizMeta.marksPerQuestion || 1} mark(s) each
+          </Typography>
+        )}
+        {errorMessage && (
+          <Alert severity="error">
+            {errorMessage}
+          </Alert>
+        )}
       </Stack>
 
       <QuestionCard
         question={questions[currentIndex]}
-        onAnswer={handleAnswer}
+        onAnswer={handleSelectAnswer}
+        disabled={selectedIndex !== null || isSubmitting}
         selectedIndex={selectedIndex}
       />
     </Container>

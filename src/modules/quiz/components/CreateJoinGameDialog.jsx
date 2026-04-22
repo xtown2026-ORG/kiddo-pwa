@@ -28,6 +28,7 @@ export default function CreateJoinGameDialog({ open, onClose }) {
                 topic,
                 difficulty: "MEDIUM",
                 numQuestions: 5,
+                maxPlayers: 4,
             });
             const sessionId = res.data?.sessionId;
             const code = res.data?.roomCode;
@@ -46,15 +47,23 @@ export default function CreateJoinGameDialog({ open, onClose }) {
         setLoading(true);
         try {
             const trimmed = roomCode.trim();
-            const maybeSessionId = /^\d+$/.test(trimmed) ? Number(trimmed) : null;
             const res = await joinQuizRoom({
-                roomCode: maybeSessionId ? undefined : trimmed,
-                sessionId: maybeSessionId || undefined,
+                roomCode: trimmed,
+                sessionId: /^\d+$/.test(trimmed) ? Number(trimmed) : undefined,
             });
-            const sessionId = res.data?.sessionId || roomCode;
-            navigate(`${sessionId}/lobby`);
-        } catch {
-            alert("Failed to join session. Check code.");
+            const sessionId = res.data?.sessionId || trimmed;
+            navigate(`${sessionId}/lobby`, {
+                state: {
+                    roomCode: res.data?.roomCode || trimmed,
+                    host: Boolean(res.data?.isHost),
+                },
+            });
+        } catch (error) {
+            const message =
+                error?.response?.data?.message ||
+                error?.message ||
+                "Failed to join session. Check code.";
+            alert(message);
         } finally {
             setLoading(false);
         }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Alert,
   Box,
   Container,
   Grid,
@@ -132,6 +133,24 @@ export default function DashboardPage() {
             <Grid item xs={12}>
               <Card
                 sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
+                onClick={() => navigate('/parent/ai-tests')}
+              >
+                <Avatar sx={{ bgcolor: '#FFF4E5', color: '#F57C00', mr: 2 }}>
+                  <EmojiEvents />
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold">Test Performance</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Track assigned tests and results clearly
+                  </Typography>
+                </Box>
+                <ChevronRight color="action" />
+              </Card>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Card
+                sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
                 onClick={() => navigate('/parent/diary')}
               >
                 <Avatar sx={{ bgcolor: '#E1F5FE', color: '#039BE5', mr: 2 }}>
@@ -214,6 +233,24 @@ export default function DashboardPage() {
           </Typography>
 
           <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <Card
+                sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
+                onClick={() => navigate('/teacher/ai-tools')}
+              >
+                <Avatar sx={{ bgcolor: '#EEF2FF', color: '#4F46E5', mr: 2 }}>
+                  <EmojiEvents />
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold">Assign AI Tests</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Generate, assign, and review unified test results
+                  </Typography>
+                </Box>
+                <ChevronRight color="action" />
+              </Card>
+            </Grid>
+
             <Grid item xs={12}>
               <Card
                 sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
@@ -355,11 +392,35 @@ export default function DashboardPage() {
 
       {/* Quick Actions / Content */}
       <Container sx={{ mt: 3 }}>
+        {data?.notifications?.new_assigned_test ? (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {data.notifications.message || "New test assigned. Open it and complete it on time."}
+          </Alert>
+        ) : null}
+
         <Typography variant="h6" fontWeight="bold" gutterBottom>
           Quick Actions
         </Typography>
 
         <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Card
+              sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
+              onClick={() => navigate(`${studentBasePath}/ai-tests`)}
+            >
+              <Avatar sx={{ bgcolor: '#FFF4E5', color: '#F57C00', mr: 2 }}>
+                <Assignment />
+              </Avatar>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle1" fontWeight="bold">Assigned Tests</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {metrics.assigned_tests?.new_count || 0} new · {metrics.assigned_tests?.completed || 0} completed
+                </Typography>
+              </Box>
+              <ChevronRight color="action" />
+            </Card>
+          </Grid>
+
           <Grid item xs={12}>
             <Card
               sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
@@ -413,6 +474,7 @@ export default function DashboardPage() {
               <ChevronRight color="action" />
             </Card>
           </Grid>
+
         </Grid>
 
       </Container>

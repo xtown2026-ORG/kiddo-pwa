@@ -1,6 +1,5 @@
 import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, Avatar, Divider, IconButton } from "@mui/material";
 import {
-  FactCheck,
   Book,
   ReceiptLong,
   CalendarMonth,
@@ -9,6 +8,12 @@ import {
   Palette,
   Logout,
   AccountBalanceWallet,
+  AutoAwesome,
+  Insights,
+  Science,
+  Terminal,
+  TravelExplore,
+  SportsEsports,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
@@ -18,11 +23,16 @@ export default function ParentSidebar({ open, onClose }) {
   const navigate = useNavigate();
 
   const menuItems = [
-    { label: "Attendance", icon: <FactCheck />, path: "/parent/attendance" },
     { label: "Diary", icon: <Book />, path: "/parent/diary" },
     { label: "Report Cards", icon: <ReceiptLong />, path: "/parent/report-cards" },
     { label: "Timetable", icon: <CalendarMonth />, path: "/parent/timetable" },
     { label: "Payments", icon: <AccountBalanceWallet />, path: "/parent/payments" },
+    { label: "Foundation Hub (6-7)", icon: <AutoAwesome />, path: "/parent/foundation-stage" },
+    { label: "Logical Thinking & Aptitude", icon: <Insights />, path: "/parent/foundation-stage/logical-thinking-aptitude" },
+    { label: "Basic Science Exploration", icon: <Science />, path: "/parent/foundation-stage/basic-science-exploration" },
+    { label: "Intro to Coding", icon: <Terminal />, path: "/parent/foundation-stage/intro-to-coding" },
+    { label: "General Knowledge Builder", icon: <TravelExplore />, path: "/parent/foundation-stage/general-knowledge-builder" },
+    { label: "Gamified Learning System", icon: <SportsEsports />, path: "/parent/foundation-stage/gamified-learning-system" },
     { label: "Themes", icon: <Palette />, path: "/parent/themes" },
     { label: "Profile", icon: <Person />, path: "/parent/profile" },
   ];
@@ -43,7 +53,15 @@ export default function ParentSidebar({ open, onClose }) {
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: 280, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 } }}
+      PaperProps={{
+        sx: {
+          width: 280,
+          borderTopLeftRadius: 16,
+          borderBottomLeftRadius: 16,
+          display: "flex",
+          flexDirection: "column",
+        }
+      }}
     >
       <Box sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Typography variant="h6" fontWeight="bold">Menu</Typography>
@@ -64,7 +82,7 @@ export default function ParentSidebar({ open, onClose }) {
 
       <Divider />
 
-      <List>
+      <List sx={{ flexGrow: 1 }}>
         {menuItems.map((item) => (
           <ListItem key={item.label} disablePadding>
             <ListItemButton onClick={() => handleNavigate(item.path)}>
@@ -89,6 +107,15 @@ export default function ParentSidebar({ open, onClose }) {
           </ListItemButton>
         </ListItem>
       </List>
+
+      <Box sx={{ px: 2, pb: 2, pt: 1, display: "flex", justifyContent: "center" }}>
+        <Box
+          component="img"
+          src="/xtown%20logo.jpg"
+          alt="xtown logo"
+          sx={{ width: 120, maxWidth: "100%", height: "auto", objectFit: "contain" }}
+        />
+      </Box>
     </Drawer>
   );
 }

@@ -33,6 +33,8 @@ export default function TeacherSidebar({ open, onClose }) {
         { label: "Assigned Classes", icon: <School />, path: "/teacher/assigned-classes" },
         { label: "Diary & Homework", icon: <Book />, path: "/teacher/diary" },
         { label: "Approvals", icon: <Assignment />, path: "/teacher/approvals" },
+        { label: "Results", icon: <Assessment />, path: "/teacher/results" },
+        { label: "Students Reports", icon: <Assessment />, path: "/teacher/students-reports" },
         { label: "Exams & Reports", icon: <Assessment />, path: "/teacher/exams/create" }, // Redirects to creation for now
         { label: "AI Tools", icon: <AutoAwesome />, path: "/teacher/ai-tools" },
         { label: "Themes", icon: <Palette />, path: "/teacher/themes" },
@@ -45,7 +47,13 @@ export default function TeacherSidebar({ open, onClose }) {
             open={open}
             onClose={onClose}
             PaperProps={{
-                sx: { width: 280, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 }
+                sx: {
+                    width: 280,
+                    borderTopLeftRadius: 16,
+                    borderBottomLeftRadius: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                }
             }}
         >
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -67,7 +75,7 @@ export default function TeacherSidebar({ open, onClose }) {
 
             <Divider />
 
-            <List>
+            <List sx={{ flexGrow: 1 }}>
                 {menuItems.map((item) => (
                     <ListItem key={item.label} disablePadding>
                         <ListItemButton onClick={() => handleNavigate(item.path)}>
@@ -92,6 +100,15 @@ export default function TeacherSidebar({ open, onClose }) {
                     </ListItemButton>
                 </ListItem>
             </List>
+
+            <Box sx={{ px: 2, pb: 2, pt: 1, display: "flex", justifyContent: "center" }}>
+                <Box
+                    component="img"
+                    src="/xtown%20logo1.jpg"
+                    alt="xtown logo"
+                    sx={{ width: 120, maxWidth: "100%", height: "auto", objectFit: "contain" }}
+                />
+            </Box>
         </Drawer>
     );
 }

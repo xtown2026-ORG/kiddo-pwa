@@ -1,11 +1,30 @@
-import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider } from "@mui/material";
-import { SmartToy, VolumeUp, Menu as MenuIcon, ChatBubbleOutline } from "@mui/icons-material";
-import { useEffect, useRef, useState } from "react";
+import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button } from "@mui/material";
+import { SmartToy, VolumeUp, Mic, Menu as MenuIcon, ChatBubbleOutline } from "@mui/icons-material";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAiChat } from "../hooks/useAiChat";
 import ChatList from "../components/ChatList";
 import ChatInput from "../components/ChatInput";
 import { useAuth } from "../../../auth/AuthProvider";
+
+const QUIZ_REDIRECT_THRESHOLD = 30;
+
+function deriveQuizTopic(messages = []) {
+  const userMessages = messages
+    .filter((message) => message?.role === "user" && typeof message?.text === "string")
+    .map((message) => message.text.trim())
+    .filter(Boolean);
+
+  if (!userMessages.length) return "General Knowledge";
+
+  const latestDetailedMessage =
+    [...userMessages].reverse().find((text) => text.length >= 12) ||
+    userMessages[userMessages.length - 1];
+
+  return latestDetailedMessage.length > 80
+    ? `${latestDetailedMessage.slice(0, 77).trim()}...`
+    : latestDetailedMessage;
+}
 
 export default function AiChatPage() {
   const introClips = [
@@ -25,13 +44,30 @@ export default function AiChatPage() {
   const [introClipIndex, setIntroClipIndex] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const messagesScrollRef = useRef(null);
+  const previousUserCountRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const classLevel = user?.class_level ?? "general";
+  const openVoiceChat = () => {
+    navigate(location.pathname.replace("/ai-chat", "/voice-chat"));
+  };
 
-  const { messages, loading, sendMessage } = useAiChat({
+  const {
+    messages,
+    conversations,
+    loading,
+    sendMessage,
+    loadConversation,
+    startNewChat,
+  } = useAiChat({
     classLevel,
+    userId: user?.id,
   });
+
+  const userMessageCount = useMemo(
+    () => messages.filter((message) => message?.role === "user").length,
+    [messages]
+  );
 
   async function handleSendMessage(text) {
     if (showIntro) setShowIntro(false);
@@ -46,6 +82,26 @@ export default function AiChatPage() {
     });
     return () => cancelAnimationFrame(id);
   }, [messages, loading]);
+
+  useEffect(() => {
+    const previousCount = previousUserCountRef.current;
+    previousUserCountRef.current = userMessageCount;
+
+    if (userMessageCount < QUIZ_REDIRECT_THRESHOLD || previousCount >= QUIZ_REDIRECT_THRESHOLD) {
+      return;
+    }
+
+    const quizTopic = deriveQuizTopic(messages);
+    const basePath = location.pathname.startsWith("/students") ? "/students" : "/student";
+
+    navigate(`${basePath}/quiz/single`, {
+      state: {
+        prefilledTopic: quizTopic,
+        autoStart: true,
+        source: "ai-chat",
+      },
+    });
+  }, [location.pathname, messages, navigate, userMessageCount]);
 
   return (
     <Box
@@ -88,26 +144,44 @@ export default function AiChatPage() {
           sx: { width: 280, display: 'flex', flexDirection: 'column' }
         }}
       >
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ChatBubbleOutline color="primary" />
-          <Typography variant="h6" fontWeight="bold">Chat History</Typography>
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1, justifyContent: "space-between" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <ChatBubbleOutline color="primary" />
+            <Typography variant="h6" fontWeight="bold">Chat History</Typography>
+          </Box>
+          <Button
+            size="small"
+            onClick={() => {
+              startNewChat();
+              setIsHistoryOpen(false);
+            }}
+          >
+            New
+          </Button>
         </Box>
         <Divider />
         <List sx={{ flex: 1, overflowY: 'auto' }}>
-          {/* Note: This is placeholder data for now until actual history API/state is connected */}
-          {messages.length === 0 ? (
+          {conversations.length === 0 ? (
             <Box sx={{ p: 4, textAlign: 'center', opacity: 0.6 }}>
               <Typography variant="body2">No previous chats yet.</Typography>
             </Box>
           ) : (
-            <ListItem disablePadding>
-              <ListItemButton onClick={() => setIsHistoryOpen(false)}>
-                <ListItemText
-                  primary="Current Chat Session"
-                  secondary={`${messages.length} messages`}
-                />
-              </ListItemButton>
-            </ListItem>
+            conversations.map((conv) => (
+              <ListItem key={conv.id} disablePadding>
+                <ListItemButton
+                  onClick={() => {
+                    loadConversation(conv.id);
+                    setShowIntro(false);
+                    setIsHistoryOpen(false);
+                  }}
+                >
+                  <ListItemText
+                    primary={conv.title || "New Chat"}
+                    secondary={`${conv.messages?.length || 0} messages`}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))
           )}
         </List>
       </Drawer>
@@ -220,6 +294,8 @@ export default function AiChatPage() {
           onSend={handleSendMessage}
           disabled={loading}
           placeholder="Type a question..."
+          placeholderEndAdornment={<Mic fontSize="small" />}
+          placeholderEndAriaLabel="Voice input"
           startAdornment={
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
               <IconButton
@@ -229,7 +305,7 @@ export default function AiChatPage() {
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  navigate(location.pathname.replace("/ai-chat", "/voice-chat"));
+                  openVoiceChat();
                 }}
                 onTouchStart={(event) => {
                   event.stopPropagation();
