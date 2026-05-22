@@ -9,8 +9,8 @@ export const getTeacherDashboard = () => api.get("/teachers/dashboard");
 const unwrap = (res) => res?.data?.data ?? res?.data ?? res;
 
 export const fetchStudentDashboard = async () => unwrap(await getStudentDashboard());
-export const fetchParentDashboard = async () => {
-  const res = await getParentDashboard();
+export const fetchParentDashboard = async (params = {}) => {
+  const res = await api.get("/parents/dashboard", { params });
   return res?.data ?? res;
 };
 export const fetchTeacherDashboard = async () => unwrap(await getTeacherDashboard());

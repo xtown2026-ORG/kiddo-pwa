@@ -117,7 +117,6 @@ export default function AiChatPage() {
         overscrollBehavior: "none",
       }}
     >
-      {/* Menu / History Button */}
       <IconButton
         onClick={() => setIsHistoryOpen(true)}
         sx={{
@@ -135,7 +134,6 @@ export default function AiChatPage() {
         <MenuIcon />
       </IconButton>
 
-      {/* History Drawer */}
       <Drawer
         anchor="left"
         open={isHistoryOpen}
@@ -186,7 +184,6 @@ export default function AiChatPage() {
         </List>
       </Drawer>
 
-      {/* Robot full-body intro video — fills screen like a background */}
       {showIntro && (
         <Box
           sx={{
@@ -272,7 +269,6 @@ export default function AiChatPage() {
         </Box>
       )}
 
-      {/* Fixed input bar at bottom */}
       <Box
         sx={{
           px: 2,

@@ -15,16 +15,24 @@ export default function MindScopePage() {
   const [activeTab, setActiveTab] = useState("grammar");
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 3, pb: 10 }}>
+    <Container
+      maxWidth="lg"
+      sx={{
+        mt: 3,
+        pb: 10,
+      }}
+    >
       <Stack spacing={3}>
         <Paper
           elevation={0}
           sx={{
             p: { xs: 2.5, sm: 3 },
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
+            borderRadius: 4,
+            border: "1px solid rgba(21, 101, 192, 0.12)",
             bgcolor: "background.paper",
+            background:
+              "linear-gradient(135deg, rgba(255,153,51,0.12) 0%, rgba(255,255,255,1) 38%, rgba(19,136,8,0.08) 100%)",
+            boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
           }}
         >
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "flex-start", sm: "center" }}>
@@ -46,27 +54,54 @@ export default function MindScopePage() {
               <Typography variant="h4" fontWeight={900}>
                 MindScope
               </Typography>
-              <Typography color="text.secondary">
-                Grammar, maps, and bilingual word meanings in one place.
+              <Typography color="text.secondary" sx={{ maxWidth: 640 }}>
+                Grammar, maps, and bilingual word meanings in one place with a cleaner India-inspired study layout.
               </Typography>
             </Box>
           </Stack>
         </Paper>
 
-        <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 4,
+            border: "1px solid rgba(21, 101, 192, 0.12)",
+            overflow: "hidden",
+            boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
+          }}
+        >
           <Tabs
             value={activeTab}
             onChange={(_, value) => setActiveTab(value)}
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
-            sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+            sx={{
+              px: { xs: 1, sm: 2 },
+              pt: 1,
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              "& .MuiTab-root": {
+                minHeight: 72,
+                fontWeight: 800,
+                textTransform: "none",
+                color: "#31456a",
+              },
+              "& .Mui-selected": {
+                color: "#4f46e5",
+              },
+            }}
           >
             {tabs.map((tab) => (
               <Tab key={tab.value} value={tab.value} icon={tab.icon} iconPosition="start" label={tab.label} />
             ))}
           </Tabs>
-          <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
+          <Box
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              bgcolor: "#fcfdff",
+            }}
+          >
             {activeTab === "grammar" ? <GrammarPanel /> : null}
             {activeTab === "maps" ? <MapsPanel /> : null}
             {activeTab === "meaning" ? <MeaningPanel /> : null}

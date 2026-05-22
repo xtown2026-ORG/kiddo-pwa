@@ -21,6 +21,39 @@ const detailFields = [
     "roll_no",
 ];
 
+function isInvalidName(value) {
+    const v = String(value || "").trim();
+    if (!v) return true;
+    if (/^student$/i.test(v)) return true;
+    if (/^user\s*#?/i.test(v)) return true;
+    return false;
+}
+
+function getDisplayName(req, tab) {
+    const parentName =
+        req?.user?.name ||
+        req?.name ||
+        req?.parent?.user?.name ||
+        req?.parent?.name ||
+        "";
+    const studentName =
+        req?.student?.user?.name ||
+        req?.student?.name ||
+        "";
+    const username =
+        req?.user?.username ||
+        req?.parent?.user?.username ||
+        req?.student?.user?.username ||
+        req?.username ||
+        "";
+
+    const preferred = tab === "parents" ? parentName : studentName || parentName;
+    if (!isInvalidName(preferred)) return preferred;
+    if (!isInvalidName(parentName)) return parentName;
+    if (!isInvalidName(studentName)) return studentName;
+    return username;
+}
+
 export default function ApprovalsPage() {
     const [studentRequests, setStudentRequests] = useState([]);
     const [parentRequests, setParentRequests] = useState([]);
@@ -112,31 +145,38 @@ export default function ApprovalsPage() {
     const sortApprovalsAscending = useMemo(
         () => (items) =>
             [...items].sort((left, right) => {
-                const leftName =
-                    left?.user?.name ||
-                    left?.student?.user?.name ||
-                    left?.student?.name ||
-                    left?.name ||
+                const leftName = getDisplayName(left, activeTab);
+                const rightName = getDisplayName(right, activeTab);
+                const leftHasProfileName = !isInvalidName(left?.user?.name || left?.name);
+                const rightHasProfileName = !isInvalidName(right?.user?.name || right?.name);
+
+                if (leftHasProfileName !== rightHasProfileName) {
+                    return leftHasProfileName ? -1 : 1;
+                }
+
+                const byName = String(leftName).localeCompare(String(rightName), undefined, {
+                    numeric: true,
+                    sensitivity: "base",
+                });
+                if (byName !== 0) return byName;
+
+                const leftUsername =
                     left?.user?.username ||
                     left?.student?.user?.username ||
                     left?.username ||
                     "";
-                const rightName =
-                    right?.user?.name ||
-                    right?.student?.user?.name ||
-                    right?.student?.name ||
-                    right?.name ||
+                const rightUsername =
                     right?.user?.username ||
                     right?.student?.user?.username ||
                     right?.username ||
                     "";
 
-                return String(leftName).localeCompare(String(rightName), undefined, {
+                return String(leftUsername).localeCompare(String(rightUsername), undefined, {
                     numeric: true,
                     sensitivity: "base",
                 });
             }),
-        []
+        [activeTab]
     );
 
     const requests = activeTab === "students"
@@ -195,27 +235,7 @@ export default function ApprovalsPage() {
                         const parentId = resolveParentId(req);
                         const isExpanded = expandedId === approvalId;
                         const isParentTab = activeTab === "parents";
-                        const rawName =
-                            req.user?.name ||
-                            req.student?.user?.name ||
-                            req.student?.name ||
-                            req?.name ||
-                            "";
-                        const username =
-                            req.user?.username ||
-                            req.student?.user?.username ||
-                            req.username ||
-                            "";
-                        const invalidName = (value) => {
-                            const v = String(value || "").trim();
-                            if (!v) return true;
-                            if (/^student$/i.test(v)) return true;
-                            if (/^user\s*#?/i.test(v)) return true;
-                            return false;
-                        };
-                        const name = !invalidName(rawName)
-                            ? rawName
-                            : (username || "Student");
+                        const name = getDisplayName(req, activeTab) || (isParentTab ? "Parent" : "Student");
                         const initial = name?.[0] || "U";
                         const className =
                             req.class?.class_name ||

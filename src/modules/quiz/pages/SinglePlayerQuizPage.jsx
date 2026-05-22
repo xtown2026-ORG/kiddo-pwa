@@ -202,14 +202,14 @@ export default function SinglePlayerQuizPage() {
         <Paper sx={{ p: 4, borderRadius: 4 }}>
           <School sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
           <Typography variant="h5" fontWeight="bold" gutterBottom>
-            {questionBankConfig?.exam ? `${questionBankConfig.exam} Question Paper` : "Gemini Quiz Practice"}
+            {questionBankConfig?.exam ? `${questionBankConfig.exam} Question Paper` : "Quiz Practice"}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
             {questionBankConfig?.exam
               ? `${questionBankConfig?.totalMarks || 0} marks paper with ${questionBankConfig?.marksPerQuestion || 1} mark(s) per question and ${questionBankConfig?.timeLimitMinutes || 10} minute(s).`
               : location.state?.source === "ai-chat"
               ? "A quiz topic was picked from your AI chat automatically."
-              : "Enter a topic and generate a smooth Gemini-powered quiz."}
+              : "Enter a topic and start a quiz."}
           </Typography>
 
           {errorMessage && (
@@ -249,7 +249,7 @@ export default function SinglePlayerQuizPage() {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 10 }}>
         <CircularProgress size={60} thickness={4} />
-        <Typography sx={{ mt: 3, fontWeight: 500 }}>Generating questions with Gemini...</Typography>
+        <Typography sx={{ mt: 3, fontWeight: 500 }}>Generating questions...</Typography>
       </Box>
     );
   }

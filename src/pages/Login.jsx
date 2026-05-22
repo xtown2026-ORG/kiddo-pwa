@@ -47,7 +47,7 @@ export default function Login() {
       return <Navigate to="/teacher/dashboard" replace />;
     }
     if (user.role === "parent") {
-      if (user.first_login) return <Navigate to="/first-login" replace />;
+      if (user.first_login) return <Navigate to="/parent/profile" replace />;
       if (user.approval_status !== "approved") {
         return <Navigate to="/approval-pending" replace />;
       }
