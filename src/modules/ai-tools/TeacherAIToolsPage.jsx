@@ -4,7 +4,7 @@ import {
   ListItemText, MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import {
-  AutoAwesome, AssignmentTurnedIn, CameraAlt, Collections, ContentPaste, DeleteOutline, Description, PictureAsPdf, RemoveCircle, School,
+  AddCircleOutline, AutoAwesome, AssignmentTurnedIn, CameraAlt, Collections, ContentPaste, DeleteOutline, Description, PictureAsPdf, RemoveCircle, School,
 } from "@mui/icons-material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { MobileDatePicker } from "@mui/x-date-pickers/MobileDatePicker";
@@ -47,49 +47,80 @@ function toWholeNumber(value, fallback = 0) {
   if (!Number.isFinite(num) || num < 0) return fallback;
   return Math.floor(num);
 }
-const ONE_MARK_TYPE_LABELS = {
-  choose: "Choose",
-  fill: "Fill up",
-  match: "Match",
-  true_false: "True or False",
-};
+const QUESTION_PATTERN_TYPE_OPTIONS = [
+  { value: "choose", label: "Choose", description: "Multiple choice question with options." },
+  { value: "text", label: "Text", description: "Write a text-based answer from the lesson content." },
+  { value: "custom", label: "Others", description: "Type your own question category name." },
+  { value: "fill", label: "Fill Up", description: "Fill in the blank from the lesson text." },
+  { value: "match", label: "Match", description: "Match related words, meanings, or concepts." },
+  { value: "true_false", label: "True or False", description: "Identify whether the statement is true or false." },
+  { value: "synonyms", label: "Synonyms", description: "Write the same or nearest meaning word." },
+  { value: "antonyms", label: "Antonyms", description: "Write the opposite meaning word." },
+  { value: "grammar", label: "Grammar", description: "Grammar correction, tense, punctuation, or usage." },
+  { value: "paragraph", label: "Paragraph", description: "Write a paragraph using key lesson points." },
+  { value: "short_answer", label: "Short Answer", description: "Answer briefly in a few lines." },
+  { value: "long_answer", label: "Long Answer", description: "Detailed answer with explanation and examples." },
+];
+const QUESTION_PATTERN_TYPE_LABELS = Object.fromEntries(
+  QUESTION_PATTERN_TYPE_OPTIONS.map((item) => [item.value, item.label])
+);
+const QUESTION_PATTERN_TYPE_DESCRIPTIONS = Object.fromEntries(
+  QUESTION_PATTERN_TYPE_OPTIONS.map((item) => [item.value, item.description])
+);
+const MARK_OPTIONS = Array.from({ length: 8 }, (_, index) => String(index + 1));
 
-function createQuestionPattern(oneMarkCounts, twoMarkCount, threeMarkCount, fiveMarkCount) {
-  const oneChoose = toWholeNumber(oneMarkCounts?.choose, 0);
-  const oneFill = toWholeNumber(oneMarkCounts?.fill, 0);
-  const oneMatch = toWholeNumber(oneMarkCounts?.match, 0);
-  const oneTrueFalse = toWholeNumber(oneMarkCounts?.true_false, 0);
-  const one = oneChoose + oneFill + oneMatch + oneTrueFalse;
-  const two = toWholeNumber(twoMarkCount, 4);
-  const three = toWholeNumber(threeMarkCount, 2);
-  const five = toWholeNumber(fiveMarkCount, 1);
-  const totalMarks = one + two * 2 + three * 3 + five * 5;
-  const totalQuestions = one + two + three + five;
+function createPatternRow(type = "choose", marks = "1", count = "0") {
   return {
-    oneMarkCounts: {
-      choose: oneChoose,
-      fill: oneFill,
-      match: oneMatch,
-      true_false: oneTrueFalse,
-    },
-    oneMarkCount: one,
-    twoMarkCount: two,
-    threeMarkCount: three,
-    fiveMarkCount: five,
+    id: `${type}-${marks}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    marks,
+    count,
+    customLabel: "",
+  };
+}
+
+function createQuestionPattern(patternRows = []) {
+  const normalizedRows = patternRows.map((row) => {
+    const type = QUESTION_PATTERN_TYPE_LABELS[row?.type] ? row.type : "choose";
+    const marks = Math.min(8, Math.max(1, toWholeNumber(row?.marks, 1)));
+    const count = toWholeNumber(row?.count, 0);
+    const customLabel = String(row?.customLabel || "").trim();
+    const label = type === "custom" && customLabel ? customLabel : (QUESTION_PATTERN_TYPE_LABELS[type] || "Choose");
+    return {
+      ...row,
+      type,
+      marks,
+      count,
+      totalMarks: marks * count,
+      customLabel,
+      label,
+    };
+  });
+
+  const activePatterns = normalizedRows.filter((row) => row.count > 0);
+  const totalMarks = activePatterns.reduce((sum, row) => sum + row.totalMarks, 0);
+  const totalQuestions = activePatterns.reduce((sum, row) => sum + row.count, 0);
+  const marksBreakdown = [...activePatterns]
+    .sort((left, right) => left.marks - right.marks || left.label.localeCompare(right.label))
+    .reduce((accumulator, row) => {
+      const current = accumulator.get(row.marks) || { marks: row.marks, count: 0 };
+      current.count += row.count;
+      accumulator.set(row.marks, current);
+      return accumulator;
+    }, new Map());
+
+  return {
+    rows: normalizedRows,
+    activePatterns,
     totalMarks,
     totalQuestions,
     isValid: totalQuestions > 0 && totalMarks > 0,
-    summary: [
-      one ? `${one} x 1 mark (${[
-        oneChoose ? `${oneChoose} choose` : "",
-        oneFill ? `${oneFill} fill up` : "",
-        oneMatch ? `${oneMatch} match` : "",
-        oneTrueFalse ? `${oneTrueFalse} true/false` : "",
-      ].filter(Boolean).join(" + ")})` : "",
-      `${two} x 2 marks`,
-      `${three} x 3 marks`,
-      `${five} x 5 marks`,
-    ].filter(Boolean).join(", "),
+    marksBreakdown: Array.from(marksBreakdown.values()),
+    summary: activePatterns.length
+      ? activePatterns
+          .map((row) => `${row.count} x ${row.marks} mark${row.marks > 1 ? "s" : ""} (${row.label})`)
+          .join(", ")
+      : "No patterns added yet",
   };
 }
 
@@ -105,11 +136,11 @@ export default function TeacherAIToolsPage() {
   const [selectedSection, setSelectedSection] = useState("");
   const [qpTopic, setQpTopic] = useState("");
   const [lsTopic, setLsTopic] = useState("");
-  const [oneMarkType, setOneMarkType] = useState("choose");
-  const [oneMarkCounts, setOneMarkCounts] = useState({ choose: "5", fill: "0", match: "0", true_false: "0" });
-  const [twoMarkCount, setTwoMarkCount] = useState("4");
-  const [threeMarkCount, setThreeMarkCount] = useState("2");
-  const [fiveMarkCount, setFiveMarkCount] = useState("1");
+  const [questionPatternRows, setQuestionPatternRows] = useState([]);
+  const [draftPatternType, setDraftPatternType] = useState("choose");
+  const [draftPatternMarks, setDraftPatternMarks] = useState("1");
+  const [draftPatternCount, setDraftPatternCount] = useState("1");
+  const [draftCustomPatternText, setDraftCustomPatternText] = useState("");
   const [questionImages, setQuestionImages] = useState([]);
   const [imageProcessing, setImageProcessing] = useState(false);
   const [generatedDraft, setGeneratedDraft] = useState(null);
@@ -127,6 +158,7 @@ export default function TeacherAIToolsPage() {
   const [assignRefreshKey, setAssignRefreshKey] = useState(0);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const customPatternInputRef = useRef(null);
 
   const { assignments, loading: assignmentsLoading } = useTeacherAssignments();
   const classOptions = useMemo(() => {
@@ -146,8 +178,8 @@ export default function TeacherAIToolsPage() {
     return Array.from(map.values());
   }, [assignments, selectedClass]);
   const questionPattern = useMemo(
-    () => createQuestionPattern(oneMarkCounts, twoMarkCount, threeMarkCount, fiveMarkCount),
-    [oneMarkCounts, twoMarkCount, threeMarkCount, fiveMarkCount]
+    () => createQuestionPattern(questionPatternRows),
+    [questionPatternRows]
   );
   useEffect(() => {
     if (selectedClass || !classOptions.length) return;
@@ -164,6 +196,11 @@ export default function TeacherAIToolsPage() {
       if (image.previewUrl) revokeImagePreview(image.previewUrl);
     });
   }, [questionImages]);
+  useEffect(() => {
+    if (draftPatternType !== "custom") return;
+    const timer = setTimeout(() => customPatternInputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [draftPatternType]);
 
   const currentType = tab === 0 ? "question_paper" : "lesson_summary";
   const currentResult = results[currentType];
@@ -231,12 +268,70 @@ export default function TeacherAIToolsPage() {
       setter(nextValue);
     };
   }
-  function updateOneMarkSelectedCount(event) {
-    const nextValue = String(event.target.value || "").replace(/[^\d]/g, "");
-    setOneMarkCounts((prev) => ({
-      ...prev,
-      [oneMarkType]: nextValue,
-    }));
+  function selectDraftPatternType(nextType) {
+    setDraftPatternType(nextType);
+    if (nextType !== "custom") {
+      setDraftCustomPatternText("");
+    }
+  }
+  function addPatternRow() {
+    const nextCount = toWholeNumber(draftPatternCount, 0);
+    if (!nextCount) return;
+    const normalizedCustomText = String(draftCustomPatternText || "").trim();
+    if (draftPatternType === "custom" && !normalizedCustomText) return;
+
+    setQuestionPatternRows((prev) => {
+      const existing = prev.find(
+        (row) =>
+          String(row.type) === String(draftPatternType) &&
+          String(row.marks) === String(draftPatternMarks) &&
+          String(row.customLabel || "").trim().toLowerCase() === normalizedCustomText.toLowerCase()
+      );
+
+      if (existing) {
+        return prev.map((row) =>
+          row.id === existing.id
+            ? { ...row, count: String(toWholeNumber(row.count, 0) + nextCount) }
+            : row
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          ...createPatternRow(draftPatternType, draftPatternMarks, String(nextCount)),
+          customLabel: normalizedCustomText,
+        },
+      ];
+    });
+
+    setDraftPatternCount("1");
+    setDraftCustomPatternText("");
+  }
+  function updatePatternRow(rowId, key, value) {
+    setQuestionPatternRows((prev) =>
+      prev.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              [key]:
+                key === "count"
+                  ? String(value || "").replace(/[^\d]/g, "")
+                  : key === "customLabel"
+                    ? String(value || "")
+                    : value,
+            }
+          : row
+      )
+    );
+  }
+  function removePatternRow(rowId) {
+    setQuestionPatternRows((prev) => {
+      if (prev.length === 1) {
+        return prev.map((row) => (row.id === rowId ? { ...row, count: "0" } : row));
+      }
+      return prev.filter((row) => row.id !== rowId);
+    });
   }
   function removeQuestionImage(imageId) {
     setQuestionImages((prev) => {
@@ -299,14 +394,13 @@ export default function TeacherAIToolsPage() {
             marks: questionPattern.totalMarks,
             totalMarks: questionPattern.totalMarks,
             question_pattern: {
-              one_mark_count: questionPattern.oneMarkCount,
-              one_mark_choose_count: questionPattern.oneMarkCounts.choose,
-              one_mark_fill_count: questionPattern.oneMarkCounts.fill,
-              one_mark_match_count: questionPattern.oneMarkCounts.match,
-              one_mark_true_false_count: questionPattern.oneMarkCounts.true_false,
-              two_mark_count: questionPattern.twoMarkCount,
-              three_mark_count: questionPattern.threeMarkCount,
-              five_mark_count: questionPattern.fiveMarkCount,
+              patterns: questionPattern.activePatterns.map((row) => ({
+                type: row.type,
+                marks: row.marks,
+                count: row.count,
+                title: row.label,
+                custom_label: row.customLabel || "",
+              })),
             },
             image_pages: questionImages.map((image) => ({ data: image.data, type: image.type, name: image.name })),
           }
@@ -398,11 +492,11 @@ export default function TeacherAIToolsPage() {
     setErrorByType({ question_paper: "", lesson_summary: "" });
     setQpTopic("");
     setLsTopic("");
-    setOneMarkType("choose");
-    setOneMarkCounts({ choose: "5", fill: "0", match: "0", true_false: "0" });
-    setTwoMarkCount("4");
-    setThreeMarkCount("2");
-    setFiveMarkCount("1");
+    setQuestionPatternRows([]);
+    setDraftPatternType("choose");
+    setDraftPatternMarks("1");
+    setDraftPatternCount("1");
+    setDraftCustomPatternText("");
     clearQuestionImages();
   }
   async function handleAssignTest() {
@@ -464,23 +558,41 @@ export default function TeacherAIToolsPage() {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Container maxWidth="lg" sx={{ py: 4 }} key={assignRefreshKey}>
-        <Box sx={{ textAlign: "center", mb: 6 }}>
-          <Typography variant="h3" fontWeight="bold" sx={{ background: "linear-gradient(45deg, #4f46e5, #ec4899)", backgroundClip: "text", color: "transparent", mb: 2 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1.5, sm: 3 } }} key={assignRefreshKey}>
+        <Box sx={{ textAlign: "center", mb: { xs: 3, sm: 6 } }}>
+          <Typography
+            variant={isMobile ? "h4" : "h3"}
+            fontWeight="bold"
+            sx={{ background: "linear-gradient(45deg, #4f46e5, #ec4899)", backgroundClip: "text", color: "transparent", mb: 1.5 }}
+          >
             Teacher&apos;s AI Assistant
           </Typography>
-          <Typography variant="h6" color="text.secondary">Automate your academic preparation with generative AI</Typography>
+          <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary">
+            Automate your academic preparation with generative AI
+          </Typography>
         </Box>
-        <Paper sx={{ mb: 4 }}>
-          <Tabs value={tab} onChange={(e, v) => setTab(v)} centered variant="fullWidth">
+        <Paper sx={{ mb: { xs: 2.5, sm: 4 }, borderRadius: { xs: 2.5, sm: 3 } }}>
+          <Tabs
+            value={tab}
+            onChange={(e, v) => setTab(v)}
+            centered={!isMobile}
+            variant={isMobile ? "fullWidth" : "fullWidth"}
+            sx={{
+              "& .MuiTab-root": {
+                minHeight: { xs: 58, sm: 64 },
+                fontSize: { xs: "0.82rem", sm: "0.95rem" },
+                px: { xs: 1, sm: 2 },
+              },
+            }}
+          >
             <Tab icon={<Description />} label="Question Paper Generator" />
             <Tab icon={<School />} label="Lesson Plan Summary" />
           </Tabs>
         </Paper>
-        <Grid container spacing={4}>
+        <Grid container spacing={{ xs: 2.5, md: 4 }}>
           <Grid item xs={12} md={5}>
-            <Card sx={{ height: "100%" }}>
-              <CardContent sx={{ display: "flex", flexDirection: "column", gap: 3, p: 3 }}>
+            <Card sx={{ height: "100%", borderRadius: { xs: 3, sm: 4 } }}>
+              <CardContent sx={{ display: "flex", flexDirection: "column", gap: { xs: 2, sm: 3 }, p: { xs: 2, sm: 3 } }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}><AutoAwesome color="primary" /><Typography variant="h6" fontWeight="bold">Configuration</Typography></Box>
                 {assignmentsLoading && <Alert severity="info">Loading your assigned classes and subjects...</Alert>}
                 {!assignmentsLoading && !assignments.length && (
@@ -513,79 +625,183 @@ export default function TeacherAIToolsPage() {
                       autoComplete="off"
                       helperText={questionImages.length ? "Optional if you are uploading textbook or handwritten pages." : "Add the chapter/topic name, or upload source photos below."}
                     />
-                    <Card variant="outlined" sx={{ borderRadius: 3 }}>
-                      <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <Card variant="outlined" sx={{ borderRadius: { xs: 2.5, sm: 3 } }}>
+                      <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2, p: { xs: 1.75, sm: 2 } }}>
                         <Typography variant="subtitle1" fontWeight={700}>Question Categories</Typography>
-                        <Grid container spacing={2}>
-                          <Grid item xs={12}>
-                            <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
-                              1 Mark Questions
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth>
-                              <InputLabel>1 Mark Type</InputLabel>
-                              <Select label="1 Mark Type" value={oneMarkType} onChange={(e) => setOneMarkType(e.target.value)}>
-                                {Object.entries(ONE_MARK_TYPE_LABELS).map(([value, label]) => (
-                                  <MenuItem key={value} value={value}>{label}</MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <TextField
-                              label="1 Mark Count"
-                              fullWidth
-                              value={oneMarkCounts[oneMarkType] || ""}
-                              onChange={updateOneMarkSelectedCount}
-                              inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
-                              helperText={`${ONE_MARK_TYPE_LABELS[oneMarkType]} count`}
-                            />
-                          </Grid>
-                          <Grid item xs={12}>
-                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                              {Object.entries(ONE_MARK_TYPE_LABELS).map(([value, label]) => (
-                                <Chip
-                                  key={value}
-                                  label={`${label}: ${toWholeNumber(oneMarkCounts[value], 0)}`}
-                                  color={oneMarkType === value ? "primary" : "default"}
-                                  variant={toWholeNumber(oneMarkCounts[value], 0) ? "filled" : "outlined"}
-                                  onClick={() => setOneMarkType(value)}
+                        <Typography variant="body2" color="text.secondary">
+                          Build the paper pattern with custom question styles like Choose, Fill Up, Match, True or False,
+                          Synonyms, Antonyms, Grammar, Paragraph, and more. Marks can be set from 1 to 8 for every row.
+                        </Typography>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: { xs: 1.5, sm: 2 },
+                            borderRadius: 3,
+                            background: "linear-gradient(180deg, rgba(79,70,229,0.04), rgba(79,70,229,0.01))",
+                          }}
+                        >
+                          <Grid container spacing={{ xs: 1.25, sm: 1.5 }} alignItems="center">
+                            <Grid item xs={12} md={5}>
+                              <FormControl fullWidth>
+                                <InputLabel>Question Pattern</InputLabel>
+                                <Select
+                                  label="Question Pattern"
+                                  value={draftPatternType}
+                                  onChange={(event) => selectDraftPatternType(event.target.value)}
+                                  renderValue={(value) => QUESTION_PATTERN_TYPE_LABELS[value] || "Choose"}
+                                >
+                                  {QUESTION_PATTERN_TYPE_OPTIONS.map((option) => (
+                                    <MenuItem key={option.value} value={option.value} sx={{ alignItems: "flex-start" }}>
+                                      <ListItemText
+                                        primary={option.label}
+                                        secondary={option.description}
+                                        primaryTypographyProps={{ fontWeight: 600 }}
+                                        secondaryTypographyProps={{ sx: { lineHeight: 1.35 } }}
+                                      />
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Grid>
+                            <Grid item xs={6} sm={4} md={2}>
+                              <FormControl fullWidth>
+                                <InputLabel>Marks</InputLabel>
+                                <Select
+                                  label="Marks"
+                                  value={draftPatternMarks}
+                                  onChange={(event) => setDraftPatternMarks(event.target.value)}
+                                >
+                                  {MARK_OPTIONS.map((mark) => (
+                                    <MenuItem key={mark} value={mark}>{mark}</MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Grid>
+                            <Grid item xs={6} sm={4} md={2.5}>
+                              <TextField
+                                label="Count"
+                                fullWidth
+                                value={draftPatternCount}
+                                onChange={(event) => setDraftPatternCount(String(event.target.value || "").replace(/[^\d]/g, ""))}
+                                inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
+                              />
+                            </Grid>
+                            {draftPatternType === "custom" && (
+                              <Grid item xs={12} sm={8} md={5}>
+                                <TextField
+                                  inputRef={customPatternInputRef}
+                                  label="Own Question Category"
+                                  fullWidth
+                                  value={draftCustomPatternText}
+                                  onChange={(event) => setDraftCustomPatternText(event.target.value)}
+                                  placeholder="e.g. Essay Writing, Definition, Map Work"
                                 />
-                              ))}
-                            </Stack>
+                              </Grid>
+                            )}
+                            <Grid item xs={12} sm={4} md={2.5}>
+                              <Button
+                                fullWidth
+                                variant="contained"
+                                startIcon={<AddCircleOutline />}
+                                onClick={addPatternRow}
+                                disabled={!toWholeNumber(draftPatternCount, 0) || (draftPatternType === "custom" && !draftCustomPatternText.trim())}
+                                sx={{
+                                  height: { xs: 48, sm: 56 },
+                                  background: "linear-gradient(45deg, #4f46e5, #6366f1)",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                Add Pattern
+                              </Button>
+                            </Grid>
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="text.secondary">
+                                {QUESTION_PATTERN_TYPE_DESCRIPTIONS[draftPatternType]}
+                              </Typography>
+                            </Grid>
                           </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <TextField
-                              label="2 Marks"
-                              fullWidth
-                              value={twoMarkCount}
-                              onChange={handleWholeNumberChange(setTwoMarkCount)}
-                              inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <TextField
-                              label="3 Marks"
-                              fullWidth
-                              value={threeMarkCount}
-                              onChange={handleWholeNumberChange(setThreeMarkCount)}
-                              inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={6}>
-                            <TextField
-                              label="5 Marks"
-                              fullWidth
-                              value={fiveMarkCount}
-                              onChange={handleWholeNumberChange(setFiveMarkCount)}
-                              inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
-                            />
-                          </Grid>
-                        </Grid>
+                        </Paper>
+                        <Typography variant="caption" color="text.secondary">
+                          Example: Synonyms 1 mark, Antonyms 1 mark, Grammar 2 marks, Match 1 mark, Paragraph 5 marks, or your own pattern like Definition 2 marks.
+                        </Typography>
+                        <Stack spacing={1.5}>
+                          {questionPattern.rows.length > 0 ? (
+                            questionPattern.rows.map((row, index) => (
+                              <Paper
+                                key={row.id}
+                                variant="outlined"
+                                sx={{
+                                  p: 1.5,
+                                  borderRadius: 3,
+                                  bgcolor: "background.paper",
+                                  borderColor: "divider",
+                                }}
+                              >
+                                <Grid container spacing={{ xs: 1.25, sm: 1.5 }} alignItems="center">
+                                  <Grid item xs={12} sm={12} md={4}>
+                                    <Typography variant="subtitle2" fontWeight={700}>
+                                      Pattern {index + 1}
+                                    </Typography>
+                                    {row.type === "custom" ? (
+                                      <TextField
+                                        label="Own Question Category"
+                                        fullWidth
+                                        size="small"
+                                        value={row.customLabel}
+                                        onChange={(event) => updatePatternRow(row.id, "customLabel", event.target.value)}
+                                        placeholder="Enter your own category name"
+                                        sx={{ mt: 0.5 }}
+                                      />
+                                    ) : (
+                                      <Typography variant="body2" color="text.secondary">
+                                        {row.label}
+                                      </Typography>
+                                    )}
+                                  </Grid>
+                                  <Grid item xs={6} sm={4} md={2}>
+                                    <TextField
+                                      label="Marks"
+                                      fullWidth
+                                      value={row.marks}
+                                      onChange={(event) => updatePatternRow(row.id, "marks", event.target.value)}
+                                      inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 1, max: 8 }}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={6} sm={4} md={2}>
+                                    <TextField
+                                      label="Count"
+                                      fullWidth
+                                      value={row.count}
+                                      onChange={(event) => updatePatternRow(row.id, "count", event.target.value)}
+                                      inputProps={{ inputMode: "numeric", pattern: "[0-9]*", min: 0 }}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={12} sm={4} md={4}>
+                                    <Stack direction="row" justifyContent={{ xs: "flex-start", sm: "flex-end" }}>
+                                      <Button color="error" startIcon={<DeleteOutline />} onClick={() => removePatternRow(row.id)}>
+                                        Remove
+                                      </Button>
+                                    </Stack>
+                                  </Grid>
+                                </Grid>
+                              </Paper>
+                            ))
+                          ) : (
+                            <Alert severity="info">
+                              Select a question pattern above, choose marks and count, then click Add Pattern to build the paper.
+                            </Alert>
+                          )}
+                        </Stack>
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                           <Chip color={questionPattern.isValid ? "success" : "warning"} label={`Total Marks: ${questionPattern.totalMarks}`} />
                           <Chip label={`Questions: ${questionPattern.totalQuestions}`} />
+                          {questionPattern.marksBreakdown.map((item) => (
+                            <Chip
+                              key={`marks-${item.marks}`}
+                              variant="outlined"
+                              label={`${item.count} question${item.count > 1 ? "s" : ""} of ${item.marks} mark${item.marks > 1 ? "s" : ""}`}
+                            />
+                          ))}
                           <Chip variant="outlined" label={questionPattern.summary} />
                         </Stack>
                         {!questionPattern.isValid && <Alert severity="warning">Add at least one question before generating the paper.</Alert>}
@@ -593,10 +809,10 @@ export default function TeacherAIToolsPage() {
                     </Card>
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple hidden onChange={handleQuestionImageChange} />
                     <input ref={galleryInputRef} type="file" accept="image/*" multiple hidden onChange={handleQuestionImageChange} />
-                    <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-                      <Button variant="outlined" startIcon={<CameraAlt />} onClick={() => cameraInputRef.current?.click()}>Add Camera Photo</Button>
-                      <Button variant="outlined" startIcon={<Collections />} onClick={() => galleryInputRef.current?.click()}>Add From Gallery</Button>
-                      {questionImages.length > 0 && <Button color="error" startIcon={<DeleteOutline />} onClick={clearQuestionImages}>Remove All Photos</Button>}
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} flexWrap="wrap" useFlexGap>
+                      <Button fullWidth={isMobile} variant="outlined" startIcon={<CameraAlt />} onClick={() => cameraInputRef.current?.click()}>Add Camera Photo</Button>
+                      <Button fullWidth={isMobile} variant="outlined" startIcon={<Collections />} onClick={() => galleryInputRef.current?.click()}>Add From Gallery</Button>
+                      {questionImages.length > 0 && <Button fullWidth={isMobile} color="error" startIcon={<DeleteOutline />} onClick={clearQuestionImages}>Remove All Photos</Button>}
                     </Stack>
                     <Typography variant="caption" color="text.secondary">Use the camera for live capture or gallery to choose existing textbook and handwritten pages. You can add multiple photos for multi-page question generation.</Typography>
                     {imageProcessing && <Alert severity="info">Processing captured images...</Alert>}
@@ -637,14 +853,14 @@ export default function TeacherAIToolsPage() {
                         ))}
                       </Stack>
                     )}
-                    <Button variant="contained" size="large" onClick={() => handleGenerate("question_paper")} disabled={loading || imageProcessing || !selectedClass || !questionPattern.isValid || (!qpTopic && !questionImages.length)} sx={{ mt: 2, background: "linear-gradient(45deg, #4f46e5, #818cf8)" }}>
+                    <Button fullWidth={isMobile} variant="contained" size="large" onClick={() => handleGenerate("question_paper")} disabled={loading || imageProcessing || !selectedClass || !questionPattern.isValid || (!qpTopic && !questionImages.length)} sx={{ mt: 2, minHeight: { xs: 48, sm: 56 }, background: "linear-gradient(45deg, #4f46e5, #818cf8)" }}>
                       {loading ? "Generating..." : "Generate Question Paper"}
                     </Button>
                   </>
                 ) : (
                   <>
                     <TextField label="Lesson Topic" fullWidth multiline rows={3} value={lsTopic} onChange={(e) => setLsTopic(e.target.value)} placeholder="What are you teaching next session?" />
-                    <Button variant="contained" size="large" onClick={() => handleGenerate("lesson_summary")} disabled={loading || !lsTopic || !selectedClass || !selectedSection} sx={{ mt: 2, background: "linear-gradient(45deg, #ec4899, #f472b6)" }}>
+                    <Button fullWidth={isMobile} variant="contained" size="large" onClick={() => handleGenerate("lesson_summary")} disabled={loading || !lsTopic || !selectedClass || !selectedSection} sx={{ mt: 2, minHeight: { xs: 48, sm: 56 }, background: "linear-gradient(45deg, #ec4899, #f472b6)" }}>
                       {loading ? "Summarizing..." : "Generate Summary"}
                     </Button>
                   </>
@@ -653,8 +869,8 @@ export default function TeacherAIToolsPage() {
             </Card>
           </Grid>
           <Grid item xs={12} md={7}>
-            <Card sx={{ height: "100%", bgcolor: "grey.50" }}>
-              <CardContent sx={{ height: "100%", minHeight: 400 }}>
+            <Card sx={{ height: "100%", bgcolor: "grey.50", borderRadius: { xs: 3, sm: 4 } }}>
+              <CardContent sx={{ height: "100%", minHeight: { xs: 320, sm: 400 }, p: { xs: 2, sm: 3 } }}>
                 {currentResult ? (
                   <Box>
                     <Typography variant="body1" sx={{ whiteSpace: "pre-wrap", fontFamily: "sans-serif" }}>{currentResult}</Typography>

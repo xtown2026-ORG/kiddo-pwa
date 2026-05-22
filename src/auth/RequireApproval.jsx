@@ -18,6 +18,12 @@ export default function RequireApproval({ children }) {
     return user?.role && APPROVAL_ROLES.includes(user.role);
   }, [user?.role]);
 
+  const completionPath = user?.role === "parent" ? "/parent/profile" : "/first-login";
+  const isOnCompletionPath =
+    location.pathname === completionPath ||
+    location.pathname.startsWith(`${completionPath}/`);
+  const isParentProfileRoute = location.pathname === "/parent/profile";
+
   useEffect(() => {
     let isMounted = true;
 
@@ -76,10 +82,14 @@ export default function RequireApproval({ children }) {
   if (loading || checking) return null;
   if (!shouldCheck) return children;
 
-  if (profileGate.firstLogin === true && location.pathname !== "/first-login") {
+  if (profileGate.firstLogin === true && !isOnCompletionPath) {
     return (
-      <Navigate to="/first-login" state={{ from: location }} replace />
+      <Navigate to={completionPath} state={{ from: location }} replace />
     );
+  }
+
+  if (user?.role === "parent" && isParentProfileRoute) {
+    return children;
   }
 
   if (profileGate.approvalStatus !== "approved") {

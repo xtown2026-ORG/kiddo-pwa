@@ -6,6 +6,7 @@ import {
   deleteProfilePicture,
 } from "./profile.api";
 import { useAuth } from "../../auth/AuthProvider";
+import { getErrorMessage } from "../../utils/apiErrorHandler";
 
 export function useProfile() {
   const { user, updateUser } = useAuth();
@@ -33,11 +34,24 @@ export function useProfile() {
         normalized?.avatar_url ||
         normalized?.avatar ||
         "";
+      const linkedStudent =
+        normalized?.student ||
+        normalized?.Student ||
+        null;
       setProfile({
         role: user.role,
         name: "",
         phone: "",
         avatar_url: "",
+        student: linkedStudent,
+        class:
+          linkedStudent?.class ||
+          linkedStudent?.Class ||
+          null,
+        section:
+          linkedStudent?.section ||
+          linkedStudent?.Section ||
+          null,
         ...normalized,
       });
 
@@ -54,7 +68,7 @@ export function useProfile() {
           : {}),
       });
     } catch (err) {
-      const message = err.message || "Failed to load profile";
+      const message = getErrorMessage(err) || "Failed to load profile";
       setError(message);
       console.error("Profile fetch error:", err);
     } finally {
@@ -70,7 +84,7 @@ export function useProfile() {
       await updateMyProfile(user.role, data);
       await fetchProfile(); // Refresh profile data
     } catch (err) {
-      const message = err.message || "Failed to update profile";
+      const message = getErrorMessage(err) || "Failed to update profile";
       setError(message);
       console.error("Profile save error:", err);
       throw err; // Re-throw so UI can handle it

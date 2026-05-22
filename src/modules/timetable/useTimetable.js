@@ -1,37 +1,50 @@
 import { useEffect, useState } from "react";
 import { getTimetable } from "./timetable.api";
 import { useAuth } from "../../auth/AuthProvider";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export function useTimetable() {
   const { user } = useAuth();
+  const { selectedChild, loading: parentChildLoading } = useParentChild();
   const [timetable, setTimetable] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!user?.role) return;
+    if (user.role === "parent" && parentChildLoading) {
+      setLoading(true);
+      return;
+    }
     fetchTimetable();
-  }, [user?.role]);
+  }, [user?.role, selectedChild?.id, selectedChild?.classId, selectedChild?.sectionId, parentChildLoading]);
 
   async function fetchTimetable() {
     try {
       setLoading(true);
+      setError(null);
 
-      console.log("Timetable User Context:", user); // Debug log
+      const classId = user?.role === "parent" ? selectedChild?.classId : user?.class_id;
+      const sectionId = user?.role === "parent" ? selectedChild?.sectionId : user?.section_id;
 
-      if (!user?.class_id || !user?.section_id) {
+      if (!classId || !sectionId) {
+        if (user?.role === "parent") {
+          setTimetable(null);
+          return;
+        }
+
         setError("Missing class/section context for timetable.");
         setTimetable(null);
         return;
       }
 
       const params = {
-        class_id: user.class_id,
-        section_id: user.section_id,
+        class_id: classId,
+        section_id: sectionId,
       };
 
       const res = await getTimetable(params);
-      setTimetable(res.data.data);
+      setTimetable(res?.data?.data ?? res?.data ?? null);
     } catch {
       setError("Failed to load timetable");
     } finally {

@@ -2,18 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
   CircularProgress,
   Container,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   Stack,
   Typography,
 } from "@mui/material";
 import { getMyPaymentLogs } from "./payments.api";
 import { useNotifications } from "../notifications/useNotifications";
+import { useParentChild } from "../parents/ParentChildContext";
 
 const isPaymentNotification = (item) => {
   const haystack = `${item?.title || ""} ${item?.message || ""}`.toLowerCase();
@@ -21,18 +27,20 @@ const isPaymentNotification = (item) => {
 };
 
 export default function ParentPaymentsPage() {
+  const { selectedChild } = useParentChild();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
   const [schoolInfo, setSchoolInfo] = useState(null);
   const [rows, setRows] = useState([]);
+  const [selectedRow, setSelectedRow] = useState(null);
   const { items: notifications, loading: notificationsLoading } = useNotifications();
 
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
-        const res = await getMyPaymentLogs();
+        const res = await getMyPaymentLogs(selectedChild?.id ? { student_id: selectedChild.id } : {});
         const data = res?.data?.data || {};
         setSummary(data?.totals || null);
         setSchoolInfo(data?.school || null);
@@ -45,12 +53,34 @@ export default function ParentPaymentsPage() {
       }
     }
     load();
-  }, []);
+  }, [selectedChild?.id]);
 
   const paymentNotifications = useMemo(
     () => (notifications || []).filter(isPaymentNotification).slice(0, 5),
     [notifications]
   );
+  const currency = (value) => Number(value || 0).toLocaleString("en-IN");
+  const pendingRows = rows.filter((row) => Number(row?.balance || 0) > 0);
+
+  const buildUpiLink = (appScheme = "upi://pay") => {
+    if (!selectedRow || !schoolInfo?.upi_id) return null;
+
+    const params = new URLSearchParams({
+      pa: schoolInfo.upi_id,
+      pn: schoolInfo.school_name || "School",
+      am: String(Number(selectedRow.balance || 0)),
+      cu: "INR",
+      tn: selectedRow.title || `School fee for ${selectedRow.studentName || "student"}`,
+    });
+
+    return `${appScheme}?${params.toString()}`;
+  };
+
+  const openPaymentLink = (appScheme) => {
+    const link = buildUpiLink(appScheme);
+    if (!link) return;
+    window.location.href = link;
+  };
 
   if (loading) {
     return (
@@ -67,6 +97,11 @@ export default function ParentPaymentsPage() {
           {error}
         </Alert>
       )}
+      {selectedChild?.name ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Viewing payments for {selectedChild.name}
+        </Typography>
+      ) : null}
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12}>
@@ -80,6 +115,9 @@ export default function ParentPaymentsPage() {
                   label={(schoolInfo?.payment_mode || "Not Set").replace(/_/g, " ")}
                 />
               </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {schoolInfo?.school_name || "School"} payment summary for parent-linked students
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -87,7 +125,7 @@ export default function ParentPaymentsPage() {
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">Due</Typography>
-              <Typography variant="h6">{summary?.totalDue ?? 0}</Typography>
+              <Typography variant="h6">{currency(summary?.totalDue)}</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -95,7 +133,7 @@ export default function ParentPaymentsPage() {
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">Paid</Typography>
-              <Typography variant="h6">{summary?.totalPaid ?? 0}</Typography>
+              <Typography variant="h6">{currency(summary?.totalPaid)}</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -103,11 +141,21 @@ export default function ParentPaymentsPage() {
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">Balance</Typography>
-              <Typography variant="h6">{summary?.totalBalance ?? 0}</Typography>
+              <Typography variant="h6">{currency(summary?.totalBalance)}</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      {pendingRows.length ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Payment reminder: {pendingRows.length} student fee {pendingRows.length > 1 ? "entries are" : "entry is"} pending.
+        </Alert>
+      ) : (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          All visible parent-linked payment entries are currently settled.
+        </Alert>
+      )}
 
       <Card sx={{ mb: 2 }}>
         <CardContent>
@@ -124,12 +172,39 @@ export default function ParentPaymentsPage() {
                     <Typography variant="caption" color="text.secondary">
                       {row.class} - {row.section}
                     </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {row.title || "School fee allocation"}
+                    </Typography>
+                    {row.message ? (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {row.message}
+                      </Typography>
+                    ) : null}
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Due: {currency(row.defaultAmount)} | Paid: {currency(row.paidAmount)} | Balance: {currency(row.balance)}
+                    </Typography>
+                    {row.dueDate ? (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Due Date: {new Date(row.dueDate).toLocaleDateString()}
+                      </Typography>
+                    ) : null}
                   </Box>
-                  <Chip
-                    size="small"
-                    color={row.paymentStatus === "Paid" ? "success" : "warning"}
-                    label={`${row.paymentStatus} | Balance: ${row.balance ?? 0}`}
-                  />
+                  <Stack spacing={1} alignItems="flex-end">
+                    <Chip
+                      size="small"
+                      color={row.paymentStatus === "Paid" ? "success" : "warning"}
+                      label={`${row.paymentStatus} | Balance: ${currency(row.balance)}`}
+                    />
+                    {Number(row.balance || 0) > 0 ? (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setSelectedRow(row)}
+                      >
+                        Pay Options
+                      </Button>
+                    ) : null}
+                  </Stack>
                 </Stack>
                 <Divider sx={{ mt: 1 }} />
               </Box>
@@ -158,6 +233,51 @@ export default function ParentPaymentsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(selectedRow)} onClose={() => setSelectedRow(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Pay Options</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <Typography variant="body2">
+              Student: {selectedRow?.studentName || "Student"}
+            </Typography>
+            <Typography variant="body2">
+              Balance: {currency(selectedRow?.balance)}
+            </Typography>
+            {schoolInfo?.upi_id ? (
+              <>
+                <Typography variant="caption" color="text.secondary">
+                  UPI ID: {schoolInfo.upi_id}
+                </Typography>
+                <Button variant="contained" onClick={() => openPaymentLink("upi://pay")}>
+                  Any UPI App
+                </Button>
+                <Button variant="outlined" onClick={() => openPaymentLink("tez://upi/pay")}>
+                  Google Pay
+                </Button>
+                <Button variant="outlined" onClick={() => openPaymentLink("paytmmp://pay")}>
+                  Paytm
+                </Button>
+                <Button variant="outlined" onClick={() => openPaymentLink("phonepe://pay")}>
+                  PhonePe
+                </Button>
+              </>
+            ) : (
+              <Alert severity="info">
+                School UPI details are not configured yet. Please contact the school to complete payment.
+              </Alert>
+            )}
+            {schoolInfo?.contact_phone ? (
+              <Typography variant="caption" color="text.secondary">
+                School Contact: {schoolInfo.contact_phone}
+              </Typography>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSelectedRow(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
