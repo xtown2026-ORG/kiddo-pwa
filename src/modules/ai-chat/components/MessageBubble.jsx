@@ -59,6 +59,24 @@ export default function MessageBubble({ message, userAvatar }) {
                         : theme.palette.primary.contrastText,
                 }}
             >
+                {!isAi && message.imagePreviewUrl && (
+                    <Box
+                        component="img"
+                        src={message.imagePreviewUrl}
+                        alt={message.imageName || "Uploaded question"}
+                        sx={{
+                            display: "block",
+                            width: "100%",
+                            maxWidth: 220,
+                            maxHeight: 220,
+                            objectFit: "cover",
+                            borderRadius: 1.5,
+                            mb: message.text || message.content ? 1 : 0,
+                            bgcolor: "rgba(255,255,255,0.16)",
+                        }}
+                    />
+                )}
+
                 {isAi && parsed ? (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
                         {parsed.visual && (

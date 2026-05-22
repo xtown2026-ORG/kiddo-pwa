@@ -19,3 +19,15 @@ export function askAiQuestion(payload, language) {
     }
   );
 }
+
+export function askAiImageQuestion({ image, question }) {
+  const formData = new FormData();
+  formData.append("image", image);
+  formData.append("question", question);
+
+  return api.post("/rag/image-question", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}

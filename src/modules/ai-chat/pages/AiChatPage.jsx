@@ -1,5 +1,5 @@
 import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button } from "@mui/material";
-import { SmartToy, VolumeUp, Mic, Menu as MenuIcon, ChatBubbleOutline } from "@mui/icons-material";
+import { Add, Close, SmartToy, VolumeUp, Mic, Menu as MenuIcon, ChatBubbleOutline } from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAiChat } from "../hooks/useAiChat";
@@ -43,8 +43,11 @@ export default function AiChatPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [introClipIndex, setIntroClipIndex] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
   const messagesScrollRef = useRef(null);
   const previousUserCountRef = useRef(0);
+  const imageInputRef = useRef(null);
+  const createdImageUrlsRef = useRef([]);
   const navigate = useNavigate();
   const location = useLocation();
   const classLevel = user?.class_level ?? "general";
@@ -71,8 +74,72 @@ export default function AiChatPage() {
 
   async function handleSendMessage(text) {
     if (showIntro) setShowIntro(false);
-    return sendMessage(text);
+    const selectedImage = selectedImages[0] || null;
+    const reply = await sendMessage(
+      text,
+      null,
+      selectedImage
+        ? {
+            image: selectedImage.file,
+            imagePreviewUrl: selectedImage.previewUrl,
+            imageName: selectedImage.name,
+          }
+        : {}
+    );
+    clearSelectedImages({ revoke: false });
+    return reply;
   }
+
+  function handleImageUpload(event) {
+    const file = Array.from(event.target.files || []).find((item) =>
+      item.type.startsWith("image/")
+    );
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    createdImageUrlsRef.current.push(previewUrl);
+    setSelectedImages((prev) => {
+      prev.forEach((image) => revokeImagePreview(image.previewUrl));
+      return [
+        {
+          id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+          file,
+          name: file.name,
+          previewUrl,
+        },
+      ];
+    });
+    event.target.value = "";
+  }
+
+  function removeSelectedImage(imageId) {
+    setSelectedImages((prev) => {
+      const image = prev.find((item) => item.id === imageId);
+      if (image?.previewUrl) revokeImagePreview(image.previewUrl);
+      return prev.filter((item) => item.id !== imageId);
+    });
+  }
+
+  function clearSelectedImages({ revoke = true } = {}) {
+    setSelectedImages((prev) => {
+      if (revoke) {
+        prev.forEach((image) => revokeImagePreview(image.previewUrl));
+      }
+      return [];
+    });
+  }
+
+  function revokeImagePreview(previewUrl) {
+    if (!previewUrl) return;
+    URL.revokeObjectURL(previewUrl);
+    createdImageUrlsRef.current = createdImageUrlsRef.current.filter((url) => url !== previewUrl);
+  }
+
+  useEffect(() => {
+    return () => {
+      createdImageUrlsRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+      createdImageUrlsRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     const scroller = messagesScrollRef.current;
@@ -286,6 +353,65 @@ export default function AiChatPage() {
           mx: "auto",
         }}
       >
+        {selectedImages.length > 0 && (
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              mb: 1,
+              overflowX: "auto",
+              pb: 0.5,
+            }}
+          >
+            {selectedImages.map((image) => (
+              <Box
+                key={image.id}
+                sx={{
+                  position: "relative",
+                  flex: "0 0 auto",
+                  width: 58,
+                  height: 58,
+                  borderRadius: 1.5,
+                  overflow: "hidden",
+                  border: "1px solid #d8e0ec",
+                  bgcolor: "#f8fafc",
+                }}
+              >
+                <Box
+                  component="img"
+                  src={image.previewUrl}
+                  alt={image.name}
+                  sx={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  aria-label="Remove image"
+                  onClick={() => removeSelectedImage(image.id)}
+                  sx={{
+                    position: "absolute",
+                    top: 2,
+                    right: 2,
+                    width: 20,
+                    height: 20,
+                    p: 0,
+                    color: "#ffffff",
+                    bgcolor: "rgba(15, 23, 42, 0.72)",
+                    "&:hover": {
+                      bgcolor: "rgba(15, 23, 42, 0.86)",
+                    },
+                  }}
+                >
+                  <Close sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
+        )}
         <ChatInput
           onSend={handleSendMessage}
           disabled={loading}
@@ -294,6 +420,28 @@ export default function AiChatPage() {
           placeholderEndAriaLabel="Voice input"
           startAdornment={
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleImageUpload}
+              />
+              <IconButton
+                size="small"
+                color="primary"
+                aria-label="Upload image"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  imageInputRef.current?.click();
+                }}
+                onTouchStart={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                <Add />
+              </IconButton>
               <IconButton
                 size="small"
                 color="primary"
