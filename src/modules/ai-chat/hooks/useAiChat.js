@@ -1,45 +1,227 @@
-import { useEffect, useMemo, useState } from "react";
-import { askAiImageQuestion, askAiQuestion } from "../api/aiChat.api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  askAiFollowup,
+  askAiImageQuestion,
+  askAiQuestion,
+  getAiChatConversation,
+  listAiChatConversations,
+  syncAiChatConversations,
+  upsertAiChatConversation,
+} from "../api/aiChat.api";
 
 export function useAiChat({ classLevel, userId }) {
   const historyKey = useMemo(
     () => `ai_chat_conversations_${userId || "guest"}_${classLevel || "general"}`,
     [userId, classLevel]
   );
+  const activeConversationKey = useMemo(
+    () => `${historyKey}_active`,
+    [historyKey]
+  );
+  const syncInFlightRef = useRef(new Map());
 
-  const [conversations, setConversations] = useState(() => {
+  const createId = useCallback(
+    (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    []
+  );
+
+  const normalizeMessage = useCallback(
+    (message, index = 0, conversationId = "conv") => {
+      const timestamp = message?.timestamp ? new Date(message.timestamp).toISOString() : new Date().toISOString();
+      return {
+        id: message?.id || `${conversationId}_msg_${index}_${new Date(timestamp).getTime()}`,
+        role: ["user", "ai", "system"].includes(message?.role) ? message.role : "user",
+        text: String(message?.text || ""),
+        imageName: message?.imageName || message?.image_name || null,
+        imagePreviewUrl: message?.imagePreviewUrl || message?.image_preview_url || null,
+        metadata: message?.metadata || null,
+        timestamp,
+      };
+    },
+    []
+  );
+
+  const normalizeConversation = useCallback(
+    (conversation, index = 0) => {
+      const id = conversation?.id || createId(`conv_${index}`);
+      const messages = Array.isArray(conversation?.messages)
+        ? conversation.messages.map((message, messageIndex) =>
+            normalizeMessage(message, messageIndex, id)
+          )
+        : [];
+      const title = String(conversation?.title || messages.find((message) => message.role === "user")?.text || "New Chat").trim();
+      return {
+        id,
+        title: title.length > 60 ? `${title.slice(0, 57)}...` : title,
+        updatedAt:
+          conversation?.updatedAt ||
+          conversation?.lastSyncedAt ||
+          messages[messages.length - 1]?.timestamp ||
+          conversation?.createdAt ||
+          new Date().toISOString(),
+        createdAt: conversation?.createdAt || messages[0]?.timestamp || new Date().toISOString(),
+        deletedAt: conversation?.deletedAt || null,
+        previewText:
+          conversation?.previewText ||
+          [...messages].reverse().find((message) => message?.text)?.text ||
+          "",
+        classLevel: conversation?.classLevel || classLevel || "general",
+        messageCount: Number(conversation?.messageCount || messages.length || 0),
+        messages,
+        metadata: conversation?.metadata || null,
+      };
+    },
+    [classLevel, createId, normalizeMessage]
+  );
+
+  const sortConversations = useCallback(
+    (items) =>
+      [...items].sort(
+        (left, right) =>
+          new Date(right.updatedAt || right.createdAt).getTime() -
+          new Date(left.updatedAt || left.createdAt).getTime()
+      ),
+    []
+  );
+
+  const getCandidateHistoryKeys = useCallback(() => {
+    if (typeof window === "undefined") return [historyKey];
+
+    const keys = new Set([historyKey]);
+    const prefix = "ai_chat_conversations_";
+
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key || !key.startsWith(prefix) || key.endsWith("_active")) continue;
+      keys.add(key);
+    }
+
+    return [...keys];
+  }, [historyKey]);
+
+  const readLocalConversations = useCallback(() => {
     if (typeof window === "undefined") return [];
     try {
-      const raw = localStorage.getItem(historyKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      const merged = [];
+
+      getCandidateHistoryKeys().forEach((key) => {
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return;
+        parsed.forEach((conversation, index) => {
+          merged.push(normalizeConversation(conversation, index));
+        });
+      });
+
+      const deduped = new Map();
+      merged.forEach((conversation) => {
+        const existing = deduped.get(conversation.id);
+        if (!existing) {
+          deduped.set(conversation.id, conversation);
+          return;
+        }
+
+        const existingUpdated = new Date(existing.updatedAt || existing.createdAt).getTime();
+        const nextUpdated = new Date(conversation.updatedAt || conversation.createdAt).getTime();
+        if (nextUpdated >= existingUpdated) {
+          deduped.set(conversation.id, {
+            ...existing,
+            ...conversation,
+            messages: conversation.messages?.length ? conversation.messages : existing.messages,
+          });
+        }
+      });
+
+      return sortConversations([...deduped.values()]);
     } catch {
       return [];
     }
+  }, [getCandidateHistoryKeys, normalizeConversation, sortConversations]);
+
+  const [conversations, setConversations] = useState(() => {
+    return readLocalConversations();
   });
   const [messages, setMessages] = useState([]);
-  const [activeConversationId, setActiveConversationId] = useState(null);
+  const [activeConversationId, setActiveConversationId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(activeConversationKey) || null;
+  });
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+
+  const persistConversations = useCallback(
+    (next) => {
+      if (typeof window === "undefined") return;
+      try {
+        localStorage.setItem(historyKey, JSON.stringify(next.slice(0, 200)));
+      } catch {
+        // Ignore cache failures.
+      }
+    },
+    [historyKey]
+  );
+
+  const persistActiveConversation = useCallback(
+    (conversationId) => {
+      if (typeof window === "undefined") return;
+      if (conversationId) {
+        localStorage.setItem(activeConversationKey, conversationId);
+      } else {
+        localStorage.removeItem(activeConversationKey);
+      }
+    },
+    [activeConversationKey]
+  );
+
+  const mergeConversations = useCallback(
+    (incomingItems, { replace = false } = {}) => {
+      setConversations((prev) => {
+        if (replace && (!Array.isArray(incomingItems) || incomingItems.length === 0)) {
+          return prev;
+        }
+
+        const baseMap = new Map();
+        const seed = replace ? [] : prev;
+        seed.forEach((conversation, index) => {
+          const normalized = normalizeConversation(conversation, index);
+          baseMap.set(normalized.id, normalized);
+        });
+        incomingItems.forEach((conversation, index) => {
+          const normalized = normalizeConversation(conversation, index);
+          const existing = baseMap.get(normalized.id);
+          if (!existing) {
+            baseMap.set(normalized.id, normalized);
+            return;
+          }
+          const existingMessages = Array.isArray(existing.messages) ? existing.messages : [];
+          const nextMessages = Array.isArray(normalized.messages) && normalized.messages.length
+            ? normalized.messages
+            : existingMessages;
+          baseMap.set(normalized.id, {
+            ...existing,
+            ...normalized,
+            messages: nextMessages,
+            messageCount: Math.max(
+              Number(existing.messageCount || existingMessages.length || 0),
+              Number(normalized.messageCount || nextMessages.length || 0)
+            ),
+            previewText: normalized.previewText || existing.previewText || "",
+          });
+        });
+        const next = sortConversations([...baseMap.values()]);
+        persistConversations(next);
+        return next;
+      });
+    },
+    [normalizeConversation, persistConversations, sortConversations]
+  );
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(historyKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setConversations(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setConversations([]);
-    }
-  }, [historyKey]);
-
-  function persistConversations(next) {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(historyKey, JSON.stringify(next.slice(0, 50)));
-    } catch {
-      // Ignore storage failures (private mode, quota, etc.)
-    }
-  }
+    setConversations(readLocalConversations());
+  }, [readLocalConversations]);
 
   function getConversationTitle(msgs) {
     const firstUser = msgs.find((m) => m.role === "user" && typeof m.text === "string");
@@ -47,47 +229,154 @@ export function useAiChat({ classLevel, userId }) {
     return raw.length > 60 ? `${raw.slice(0, 57)}...` : raw;
   }
 
+  const pushConversationToServer = useCallback(
+    async (snapshot) => {
+      if (!userId) return;
+      const serialized = JSON.stringify(snapshot);
+      if (syncInFlightRef.current.get(snapshot.id) === serialized) return;
+      syncInFlightRef.current.set(snapshot.id, serialized);
+      try {
+        const response = await upsertAiChatConversation(snapshot);
+        const saved = response?.data || response;
+        if (saved) {
+          mergeConversations([saved]);
+        }
+      } catch {
+        // Keep offline/local state intact.
+      } finally {
+        syncInFlightRef.current.delete(snapshot.id);
+      }
+    },
+    [mergeConversations, userId]
+  );
+
   function saveConversation(nextMessages) {
     const now = new Date().toISOString();
     const convId =
-      activeConversationId || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      activeConversationId || createId("conv");
+
+    const normalizedMessages = nextMessages.map((message, index) =>
+      normalizeMessage(message, index, convId)
+    );
 
     const payload = {
       id: convId,
-      title: getConversationTitle(nextMessages),
+      title: getConversationTitle(normalizedMessages),
       updatedAt: now,
-      createdAt: now,
-      messages: nextMessages.slice(-200),
+      createdAt:
+        conversations.find((conversation) => conversation.id === convId)?.createdAt || now,
+      previewText: [...normalizedMessages].reverse().find((message) => message?.text)?.text || "",
+      classLevel: classLevel || "general",
+      messageCount: normalizedMessages.length,
+      messages: normalizedMessages.slice(-500),
     };
-
-    setConversations((prev) => {
-      const idx = prev.findIndex((c) => c.id === convId);
-      let next = prev;
-
-      if (idx >= 0) {
-        const existing = prev[idx];
-        const updated = {
-          ...existing,
-          ...payload,
-          createdAt: existing.createdAt || payload.createdAt,
-        };
-        next = [...prev];
-        next[idx] = updated;
-      } else {
-        next = [payload, ...prev];
-      }
-
-      next.sort(
-        (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
-      );
-      persistConversations(next);
-      return next;
-    });
-
-    if (!activeConversationId) {
+    mergeConversations([payload]);
+    if (activeConversationId !== convId) {
       setActiveConversationId(convId);
+      persistActiveConversation(convId);
     }
+    void pushConversationToServer(payload);
+    return payload;
   }
+
+  const refreshConversationList = useCallback(
+    async ({ search = "", offset = 0, append = false } = {}) => {
+      if (!userId) return;
+      setHistoryLoading(true);
+      try {
+        const requestParams = {
+          classLevel,
+          search: search || undefined,
+          offset,
+          limit: 25,
+        };
+        let response = await listAiChatConversations(requestParams);
+        let data = response?.data || response;
+        let items = Array.isArray(data?.items) ? data.items : [];
+
+        if (!append && !search && offset === 0 && items.length === 0 && classLevel) {
+          response = await listAiChatConversations({
+            search: undefined,
+            offset: 0,
+            limit: 25,
+          });
+          data = response?.data || response;
+          items = Array.isArray(data?.items) ? data.items : [];
+        }
+
+        mergeConversations(items, { replace: !append && !search && items.length > 0 });
+        setHistoryOffset(offset + items.length);
+        setHistoryHasMore(Boolean(data?.hasMore));
+      } catch {
+        // Keep local cache.
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [classLevel, mergeConversations, userId]
+  );
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setMessages([]);
+      persistActiveConversation(null);
+      return;
+    }
+
+    const cached = conversations.find((conversation) => conversation.id === activeConversationId);
+    if (cached?.messages?.length) {
+      setMessages(cached.messages);
+    }
+    persistActiveConversation(activeConversationId);
+  }, [activeConversationId, conversations, persistActiveConversation]);
+
+  useEffect(() => {
+    let ignore = false;
+    const timer = setTimeout(async () => {
+      if (ignore) return;
+      await refreshConversationList({ search: historyQuery, offset: 0, append: false });
+    }, historyQuery ? 240 : 0);
+    return () => {
+      ignore = true;
+      clearTimeout(timer);
+    };
+  }, [historyQuery, refreshConversationList]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function bootstrap() {
+      if (!userId) return;
+      const localConversations = readLocalConversations();
+      if (localConversations.length) {
+        try {
+          await syncAiChatConversations(localConversations);
+        } catch {
+          // Local fallback remains available offline.
+        }
+      }
+      if (!ignore) {
+        await refreshConversationList({ search: "", offset: 0, append: false });
+      }
+    }
+
+    void bootstrap();
+    return () => {
+      ignore = true;
+    };
+  }, [readLocalConversations, refreshConversationList, userId]);
+
+  useEffect(() => {
+    function handleReconnect() {
+      void refreshConversationList({ search: historyQuery, offset: 0, append: false });
+    }
+    window.addEventListener("online", handleReconnect);
+    window.addEventListener("focus", handleReconnect);
+    return () => {
+      window.removeEventListener("online", handleReconnect);
+      window.removeEventListener("focus", handleReconnect);
+    };
+  }, [historyQuery, refreshConversationList]);
 
   async function sendMessage(text, preferredLanguage = null, sendOptions = {}) {
     const options =
@@ -101,11 +390,12 @@ export function useAiChat({ classLevel, userId }) {
     const selectedImage = options?.image || null;
 
     const userMsg = {
+      id: createId("msg"),
       role: "user",
       text,
       imagePreviewUrl: options?.imagePreviewUrl,
-      imageName: options?.imageName,
-      timestamp: new Date(),
+      imageName: options?.imageName || null,
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => {
@@ -140,9 +430,17 @@ export function useAiChat({ classLevel, userId }) {
         "AI assistant is temporarily unavailable. Please try again.";
 
       const aiMsg = {
+        id: createId("msg"),
         role: "ai",
         text: String(answerText),
-        timestamp: new Date(),
+        metadata: {
+          followupSuggestions: Array.isArray(res?.data?.followupSuggestions)
+            ? res.data.followupSuggestions
+            : Array.isArray(res?.followupSuggestions)
+            ? res.followupSuggestions
+            : [],
+        },
+        timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => {
@@ -162,9 +460,10 @@ export function useAiChat({ classLevel, userId }) {
           : "AI assistant is temporarily unavailable. Please try again.";
 
       const aiMsg = {
+        id: createId("msg"),
         role: "ai",
         text: fallbackText,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => {
@@ -178,21 +477,136 @@ export function useAiChat({ classLevel, userId }) {
     }
   }
 
+  async function sendFollowup({ label, originalQuestion, previousAnswer, followupType }) {
+    if (!originalQuestion || !previousAnswer || !followupType) return null;
+
+    const userMsg = {
+      id: createId("msg"),
+      role: "user",
+      text: label || "Follow-up",
+      metadata: {
+        isFollowupAction: true,
+        followupType,
+        originalQuestion,
+        previousAnswer,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+      saveConversation(next);
+      return next;
+    });
+    setLoading(true);
+
+    try {
+      const res = await askAiFollowup({
+        originalQuestion,
+        previousAnswer,
+        followupType,
+      });
+
+      const data = res?.data || res || {};
+      const answerText =
+        data?.answer ||
+        "AI assistant is temporarily unavailable. Please try again.";
+
+      const aiMsg = {
+        id: createId("msg"),
+        role: "ai",
+        text: String(answerText),
+        metadata: {
+          followupType,
+          imageUrl: data?.imageUrl || null,
+          imageDataUrl: data?.imageDataUrl || null,
+          followupSuggestions: Array.isArray(data?.followupSuggestions)
+            ? data.followupSuggestions
+            : [],
+          source: data?.source || "ai-followup",
+          originalQuestion,
+          previousAnswer,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages((prev) => {
+        const next = [...prev, aiMsg];
+        saveConversation(next);
+        return next;
+      });
+
+      return aiMsg;
+    } catch (error) {
+      const aiMsg = {
+        id: createId("msg"),
+        role: "ai",
+        text: "Let's continue with a short, clear explanation in a moment. Please try again.",
+        metadata: {
+          followupType,
+          followupSuggestions: [],
+          source: "ai-followup",
+          originalQuestion,
+          previousAnswer,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages((prev) => {
+        const next = [...prev, aiMsg];
+        saveConversation(next);
+        return next;
+      });
+
+      return aiMsg;
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return {
     messages,
     conversations,
     activeConversationId,
     loading,
+    historyLoading,
+    historyHasMore,
+    historyQuery,
     sendMessage,
+    sendFollowup,
     startNewChat: () => {
       setMessages([]);
       setActiveConversationId(null);
+      persistActiveConversation(null);
     },
-    loadConversation: (conversationId) => {
+    loadConversation: async (conversationId) => {
       const found = conversations.find((c) => c.id === conversationId);
-      if (!found) return;
-      setMessages(Array.isArray(found.messages) ? found.messages : []);
-      setActiveConversationId(found.id);
+      if (found?.messages?.length) {
+        setMessages(found.messages);
+      } else {
+        setMessages([]);
+      }
+      setActiveConversationId(conversationId);
+      if (!userId) return;
+      try {
+        const response = await getAiChatConversation(conversationId);
+        const data = response?.data || response;
+        if (data) {
+          mergeConversations([data]);
+          setMessages(Array.isArray(data.messages) ? data.messages : []);
+        }
+      } catch {
+        // Keep cached conversation if available.
+      }
     },
+    loadMoreConversations: async () => {
+      if (!historyHasMore || historyLoading) return;
+      await refreshConversationList({
+        search: historyQuery,
+        offset: historyOffset,
+        append: true,
+      });
+    },
+    setHistoryQuery,
   };
 }

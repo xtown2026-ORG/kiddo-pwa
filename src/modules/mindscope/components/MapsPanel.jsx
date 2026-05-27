@@ -14,6 +14,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -1157,7 +1159,7 @@ function getCardState(activeMapId, mapId, practiceMapId = "") {
   };
 }
 
-function MapMarker({ marker, color }) {
+function MapMarker({ marker, color, onSelect }) {
   const labelBox = marker.labelBox || {
     left: marker.labelX,
     right: marker.labelX + 12,
@@ -1190,6 +1192,31 @@ function MapMarker({ marker, color }) {
       arrow
     >
       <Box>
+        {onSelect ? (
+          <Box
+            onClick={onSelect}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Show details for ${marker.label}`}
+            sx={{
+              position: "absolute",
+              left: `${marker.x}%`,
+              top: `${marker.y}%`,
+              transform: "translate(-50%, -50%)",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              zIndex: 5,
+              cursor: "pointer",
+            }}
+          />
+        ) : null}
         {marker.type === "region" ? (
           <Box
             sx={{
@@ -1313,44 +1340,60 @@ function InteractiveMapCard({
   isActiveSearch,
   isDimmed,
   searchResult,
+  isMobile,
 }) {
+  const [selectedMarkerId, setSelectedMarkerId] = useState("");
   const markers = isActiveSearch && !isPracticeOpen ? searchResult.markers : [];
   const laidOutMarkers = useMemo(() => layoutMarkers(markers, map.id), [markers, map.id]);
   const finalScale = Math.min(2, Math.max(1, zoom));
   const cardAccent = map.accent;
   const shouldShowSearchSummary = false;
-  const shouldShowSearchLegend = isActiveSearch && searchResult.markers.length;
+  const shouldShowSearchLegend = !isMobile && isActiveSearch && searchResult.markers.length;
+  const selectedMarker = useMemo(
+    () => laidOutMarkers.find((marker) => marker.id === selectedMarkerId) || null,
+    [laidOutMarkers, selectedMarkerId]
+  );
+
+  useEffect(() => {
+    if (!laidOutMarkers.some((marker) => marker.id === selectedMarkerId)) {
+      setSelectedMarkerId("");
+    }
+  }, [laidOutMarkers, selectedMarkerId]);
 
   return (
     <Box
       sx={{
         position: "relative",
-        borderRadius: 6,
-        p: { xs: 1.5, sm: 2 },
+        borderRadius: { xs: 0, sm: 6 },
+        p: { xs: 0, sm: 2 },
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        background: `linear-gradient(180deg, ${alpha(cardAccent, 0.11)} 0%, rgba(255,255,255,0.86) 18%, rgba(255,255,255,0.96) 100%)`,
+        background: isMobile
+          ? "#ffffff"
+          : `linear-gradient(180deg, ${alpha(cardAccent, 0.11)} 0%, rgba(255,255,255,0.86) 18%, rgba(255,255,255,0.96) 100%)`,
         border: `1px solid ${alpha(cardAccent, isActiveSearch ? 0.22 : 0.12)}`,
-        boxShadow: isActiveSearch
-          ? `0 26px 52px ${alpha(cardAccent, 0.18)}`
-          : "0 20px 40px rgba(15, 23, 42, 0.07)",
-        backdropFilter: "blur(18px)",
+        boxShadow: isMobile
+          ? "none"
+          : isActiveSearch
+            ? `0 26px 52px ${alpha(cardAccent, 0.18)}`
+            : "0 20px 40px rgba(15, 23, 42, 0.07)",
+        backdropFilter: isMobile ? "none" : "blur(18px)",
         transition: "transform 320ms ease, box-shadow 320ms ease, border-color 320ms ease",
         "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 30px 58px ${alpha(cardAccent, 0.18)}`,
+          transform: isMobile ? "none" : "translateY(-4px)",
+          boxShadow: isMobile ? "none" : `0 30px 58px ${alpha(cardAccent, 0.18)}`,
         },
       }}
     >
-      <Stack spacing={1.5}>
+      <Stack spacing={{ xs: 1.25, sm: 1.5 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={1.5}
           alignItems={{ xs: "flex-start", sm: "center" }}
           justifyContent="space-between"
         >
-          <Box>
+          <Box sx={{ width: "100%" }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
               <Chip
                 size="small"
@@ -1377,12 +1420,17 @@ function InteractiveMapCard({
             <Typography variant="h6" fontWeight={900} color="#0b2a55">
               {map.title}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
               {map.caption}
             </Typography>
+            {isMobile && isActiveSearch && searchResult.markers.length ? (
+              <Typography variant="caption" sx={{ mt: 0.75, display: "block", color: "text.secondary", fontWeight: 700 }}>
+                Tap a marker to see its name and details.
+              </Typography>
+            ) : null}
           </Box>
 
-          <Stack direction="row" spacing={0.5} alignItems="center">
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ width: { xs: "100%", sm: "auto" }, justifyContent: { xs: "space-between", sm: "flex-start" } }}>
             <IconButton
               size="small"
               onClick={() => onZoomChange(map.id, zoom - 0.15)}
@@ -1424,10 +1472,10 @@ function InteractiveMapCard({
           sx={{
             position: "relative",
             overflow: "hidden",
-            borderRadius: 5,
-            bgcolor: "#eef6ff",
+            borderRadius: { xs: 3, sm: 5 },
+            bgcolor: isMobile ? "#f8fbff" : "#eef6ff",
             border: `1px solid ${alpha(cardAccent, 0.15)}`,
-            height: { xs: 320, sm: 430, md: 520 },
+            height: { xs: 235, sm: 430, md: 520 },
           }}
         >
           <Box
@@ -1468,7 +1516,12 @@ function InteractiveMapCard({
             />
 
             {laidOutMarkers.map((marker) => (
-              <MapMarker key={marker.id} marker={marker} color={cardAccent} />
+              <MapMarker
+                key={marker.id}
+                marker={marker}
+                color={cardAccent}
+                onSelect={() => setSelectedMarkerId(marker.id)}
+              />
             ))}
           </Box>
 
@@ -1496,6 +1549,37 @@ function InteractiveMapCard({
             </Box>
           ) : null}
         </Box>
+
+        {isMobile && selectedMarker ? (
+          <Box
+            sx={{
+              borderRadius: { xs: 3, sm: 4 },
+              p: 1.2,
+              bgcolor: "rgba(255,255,255,0.96)",
+              border: `1px solid ${alpha(cardAccent, 0.18)}`,
+              boxShadow: isMobile ? "none" : "0 18px 36px rgba(15, 23, 42, 0.1)",
+            }}
+          >
+            <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
+                  {selectedMarker.label}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.35 }}>
+                  {selectedMarker.detail}
+                </Typography>
+              </Box>
+              <IconButton
+                size="small"
+                onClick={() => setSelectedMarkerId("")}
+                aria-label={`Close details for ${selectedMarker.label}`}
+                sx={{ mt: -0.5, mr: -0.5 }}
+              >
+                <Close fontSize="small" />
+              </IconButton>
+            </Stack>
+          </Box>
+        ) : null}
 
         {shouldShowSearchLegend ? (
           <Box
@@ -1579,6 +1663,8 @@ function InteractiveMapCard({
 }
 
 export default function MapsPanel() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const practiceSectionRef = useRef(null);
   const [zooms, setZooms] = useState(() =>
     mapPhotos.reduce((items, map) => ({ ...items, [map.id]: 1 }), {})
@@ -1764,11 +1850,13 @@ export default function MapsPanel() {
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 6,
-        borderColor: "rgba(21, 101, 192, 0.14)",
-        background:
-          "linear-gradient(180deg, rgba(245,249,255,1) 0%, rgba(255,255,255,0.98) 22%, rgba(246,250,255,1) 100%)",
-        boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+        borderRadius: { xs: 0, sm: 6 },
+        borderColor: { xs: "transparent", sm: "rgba(21, 101, 192, 0.14)" },
+        background: {
+          xs: "#fcfdff",
+          sm: "linear-gradient(180deg, rgba(245,249,255,1) 0%, rgba(255,255,255,0.98) 22%, rgba(246,250,255,1) 100%)",
+        },
+        boxShadow: { xs: "none", sm: "0 24px 60px rgba(15, 23, 42, 0.08)" },
         overflow: "hidden",
         "@keyframes mapPulse": {
           "0%": { transform: "translate(-50%, -50%) scale(0.8)", opacity: 0.75 },
@@ -1781,19 +1869,21 @@ export default function MapsPanel() {
         },
       }}
     >
-      <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
-        <Stack spacing={3}>
+      <CardContent sx={{ p: { xs: 0, sm: 2.5, md: 3 } }}>
+        <Stack spacing={{ xs: 2, sm: 3 }}>
           <Box
             sx={{
-              borderRadius: 5,
-              p: { xs: 2, sm: 2.5, md: 3 },
-              background:
-                "linear-gradient(135deg, rgba(17,111,199,0.10) 0%, rgba(255,255,255,0.95) 38%, rgba(3,169,244,0.08) 100%)",
-              border: "1px solid rgba(17,111,199,0.12)",
-              boxShadow: "0 18px 36px rgba(15, 23, 42, 0.05)",
+              borderRadius: { xs: 0, sm: 5 },
+              p: { xs: 0, sm: 2.5, md: 3 },
+              background: {
+                xs: "transparent",
+                sm: "linear-gradient(135deg, rgba(17,111,199,0.10) 0%, rgba(255,255,255,0.95) 38%, rgba(3,169,244,0.08) 100%)",
+              },
+              border: { xs: "none", sm: "1px solid rgba(17,111,199,0.12)" },
+              boxShadow: { xs: "none", sm: "0 18px 36px rgba(15, 23, 42, 0.05)" },
             }}
           >
-            <Stack spacing={2.2}>
+            <Stack spacing={{ xs: 1.5, sm: 2.2 }}>
               <Stack
                 direction={{ xs: "column", md: "row" }}
                 spacing={2}
@@ -1804,20 +1894,20 @@ export default function MapsPanel() {
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                     <Box
                       sx={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 3,
+                        width: { xs: 36, sm: 42 },
+                        height: { xs: 36, sm: 42 },
+                        borderRadius: { xs: 2, sm: 3 },
                         display: "grid",
                         placeItems: "center",
                         background: "linear-gradient(135deg, #116fc7 0%, #33a7ff 100%)",
                         color: "white",
-                        boxShadow: "0 14px 28px rgba(17, 111, 199, 0.24)",
+                        boxShadow: { xs: "none", sm: "0 14px 28px rgba(17, 111, 199, 0.24)" },
                       }}
                     >
                       <Explore />
                     </Box>
                     <Box>
-                      <Typography variant="h5" fontWeight={900} color="#0b2a55">
+                      <Typography variant="h5" fontWeight={900} color="#0b2a55" sx={{ fontSize: { xs: "1.1rem", sm: "1.5rem" } }}>
                         Maps Practice
                       </Typography>
                     </Box>
@@ -1834,7 +1924,7 @@ export default function MapsPanel() {
                   }
                 }}
                 fullWidth
-                placeholder="Ask anything: Show major ports in India, Rivers, Pacific Ocean, Deserts, Countries in Asia..."
+                placeholder={isMobile ? "Ask any map question" : "Ask anything: Show major ports in India, Rivers, Pacific Ocean, Deserts, Countries in Asia..."}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1848,14 +1938,14 @@ export default function MapsPanel() {
                         <Button
                           onClick={clearSearch}
                           startIcon={<Close />}
-                          sx={{
-                            ml: 1,
-                            minWidth: 0,
-                            borderRadius: 999,
-                            px: 1.5,
-                            fontWeight: 800,
-                            textTransform: "none",
-                            color: "#4b5563",
+                        sx={{
+                          ml: 1,
+                          minWidth: 0,
+                          borderRadius: 999,
+                          px: { xs: 1.2, sm: 1.5 },
+                          fontWeight: 800,
+                          textTransform: "none",
+                          color: "#4b5563",
                             bgcolor: "rgba(255,255,255,0.82)",
                             "&:hover": {
                               bgcolor: "rgba(255,255,255,0.96)",
@@ -1871,7 +1961,7 @@ export default function MapsPanel() {
                         sx={{
                           ml: 1,
                           borderRadius: 999,
-                          px: 2,
+                          px: { xs: 1.6, sm: 2 },
                           fontWeight: 800,
                           textTransform: "none",
                           background: "linear-gradient(135deg, #116fc7 0%, #33a7ff 100%)",
@@ -1884,9 +1974,10 @@ export default function MapsPanel() {
                 }}
                 sx={{
                   "& .MuiOutlinedInput-root": {
-                    borderRadius: 999,
+                    borderRadius: { xs: 3, sm: 999 },
                     bgcolor: "rgba(255,255,255,0.94)",
-                    boxShadow: "0 16px 34px rgba(15, 23, 42, 0.08)",
+                    boxShadow: { xs: "none", sm: "0 16px 34px rgba(15, 23, 42, 0.08)" },
+                    minHeight: { xs: 54, sm: "auto" },
                     pr: 0.6,
                   },
                 }}
@@ -1948,7 +2039,7 @@ export default function MapsPanel() {
             sx={{
               display: "flex",
               flexWrap: "wrap",
-              gap: 3,
+              gap: { xs: 1.5, sm: 3 },
               justifyContent: "center",
               alignItems: "stretch",
             }}
@@ -1976,6 +2067,7 @@ export default function MapsPanel() {
                     isActiveSearch={activeSearchMapId === map.id}
                     isDimmed={Boolean(activeSearchMapId) && activeSearchMapId !== map.id}
                     searchResult={mapSearchResult}
+                    isMobile={isMobile}
                   />
                 </Box>
               );
@@ -1986,11 +2078,11 @@ export default function MapsPanel() {
             <Box
               ref={practiceSectionRef}
               sx={{
-                borderRadius: 5,
+                borderRadius: { xs: 3, sm: 5 },
                 p: { xs: 2, sm: 2.5 },
                 bgcolor: "rgba(255,255,255,0.92)",
                 border: `1px solid ${alpha(practiceMap.accent, 0.15)}`,
-                boxShadow: "0 20px 42px rgba(15, 23, 42, 0.08)",
+                boxShadow: { xs: "none", sm: "0 20px 42px rgba(15, 23, 42, 0.08)" },
               }}
             >
               <Stack spacing={2}>
@@ -2103,74 +2195,202 @@ export default function MapsPanel() {
 
                       {practiceQuestions.map((question, index) => {
                         const checked = result?.checked.find((item) => item.id === question.id);
-                        const borderColor = checked
-                          ? checked.isCorrect
-                            ? "success.main"
-                            : "warning.main"
-                          : "primary.main";
-
                         return (
                           <Box
-                            key={question.id}
+                            key={`${question.id}-marker`}
                             sx={{
                               position: "absolute",
                               left: `${question.x}%`,
                               top: `${question.y}%`,
                               transform: "translate(-50%, -50%)",
-                              width: { xs: 118, sm: 152 },
+                              width: { xs: 26, sm: 34 },
+                              height: { xs: 26, sm: 34 },
+                              borderRadius: "50%",
+                              display: "grid",
+                              placeItems: "center",
+                              bgcolor: checked
+                                ? checked.isCorrect
+                                  ? "success.main"
+                                  : "warning.main"
+                                : "rgba(255,255,255,0.95)",
+                              color: checked ? "#fff" : "#0b2a55",
+                              border: `2px solid ${alpha(practiceMap.accent, 0.42)}`,
+                              boxShadow: "0 10px 18px rgba(15, 23, 42, 0.14)",
+                              fontWeight: 900,
+                              fontSize: { xs: "0.78rem", sm: "0.9rem" },
+                              zIndex: 2,
                             }}
                           >
-                            <TextField
-                              value={answers[question.id] || ""}
-                              onChange={(event) => updateAnswer(question.id, event.target.value)}
-                              fullWidth
-                              size="small"
-                              placeholder={`${index + 1}`}
-                              disabled={Boolean(result)}
-                              sx={{
-                                bgcolor: "rgba(255,255,255,0.96)",
-                                borderRadius: 2,
-                                boxShadow: "0 10px 18px rgba(15, 23, 42, 0.10)",
-                                "& .MuiOutlinedInput-root": {
-                                  fontWeight: 800,
-                                  fontSize: { xs: 12, sm: 14 },
-                                  color: checked?.isCorrect ? "success.main" : "text.primary",
-                                  "& fieldset": {
-                                    borderColor,
-                                    borderWidth: checked ? 2 : 1,
-                                  },
-                                  "&:hover fieldset": {
-                                    borderColor,
-                                  },
-                                  "&.Mui-focused fieldset": {
-                                    borderColor,
-                                  },
-                                },
-                              }}
-                            />
-                            {checked ? (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: "inline-block",
-                                  mt: 0.4,
-                                  px: 0.85,
-                                  py: 0.25,
-                                  borderRadius: 999,
-                                  bgcolor: "rgba(255,255,255,0.95)",
-                                  fontWeight: 800,
-                                }}
-                                color={checked.isCorrect ? "success.main" : "warning.main"}
-                              >
-                                {checked.isCorrect ? `Correct +${question.marks}` : `Answer: ${question.answer}`}
-                              </Typography>
-                            ) : null}
+                            {index + 1}
                           </Box>
                         );
                       })}
+
+                      {!isMobile ? (
+                        practiceQuestions.map((question, index) => {
+                          const checked = result?.checked.find((item) => item.id === question.id);
+                          const borderColor = checked
+                            ? checked.isCorrect
+                              ? "success.main"
+                              : "warning.main"
+                            : "primary.main";
+
+                          return (
+                            <Box
+                              key={question.id}
+                              sx={{
+                                position: "absolute",
+                                left: `${question.x}%`,
+                                top: `${question.y}%`,
+                                transform: "translate(-50%, -50%)",
+                                width: { xs: 118, sm: 152 },
+                              }}
+                            >
+                              <TextField
+                                value={answers[question.id] || ""}
+                                onChange={(event) => updateAnswer(question.id, event.target.value)}
+                                fullWidth
+                                size="small"
+                                placeholder={`${index + 1}`}
+                                disabled={Boolean(result)}
+                                sx={{
+                                  bgcolor: "rgba(255,255,255,0.96)",
+                                  borderRadius: 2,
+                                  boxShadow: "0 10px 18px rgba(15, 23, 42, 0.10)",
+                                  "& .MuiOutlinedInput-root": {
+                                    fontWeight: 800,
+                                    fontSize: { xs: 12, sm: 14 },
+                                    color: checked?.isCorrect ? "success.main" : "text.primary",
+                                    "& fieldset": {
+                                      borderColor,
+                                      borderWidth: checked ? 2 : 1,
+                                    },
+                                    "&:hover fieldset": {
+                                      borderColor,
+                                    },
+                                    "&.Mui-focused fieldset": {
+                                      borderColor,
+                                    },
+                                  },
+                                }}
+                              />
+                              {checked ? (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: "inline-block",
+                                    mt: 0.4,
+                                    px: 0.85,
+                                    py: 0.25,
+                                    borderRadius: 999,
+                                    bgcolor: "rgba(255,255,255,0.95)",
+                                    fontWeight: 800,
+                                  }}
+                                  color={checked.isCorrect ? "success.main" : "warning.main"}
+                                >
+                                  {checked.isCorrect ? `Correct +${question.marks}` : `Answer: ${question.answer}`}
+                                </Typography>
+                              ) : null}
+                            </Box>
+                          );
+                        })
+                      ) : null}
                     </Box>
                   </Box>
                 </Box>
+
+                {isMobile ? (
+                  <Stack spacing={1.1}>
+                    <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
+                      Answer the numbered places below
+                    </Typography>
+                    {practiceQuestions.map((question, index) => {
+                      const checked = result?.checked.find((item) => item.id === question.id);
+                      const borderColor = checked
+                        ? checked.isCorrect
+                          ? "success.main"
+                          : "warning.main"
+                        : "primary.main";
+
+                      return (
+                        <Box
+                          key={`${question.id}-mobile-input`}
+                          sx={{
+                            borderRadius: 3,
+                            p: 1,
+                            bgcolor: "rgba(247,251,255,0.92)",
+                            border: `1px solid ${alpha(practiceMap.accent, 0.12)}`,
+                          }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="flex-start">
+                            <Box
+                              sx={{
+                                width: 28,
+                                height: 28,
+                                mt: 0.75,
+                                borderRadius: "50%",
+                                display: "grid",
+                                placeItems: "center",
+                                bgcolor: alpha(practiceMap.accent, 0.12),
+                                color: "#0b2a55",
+                                fontWeight: 900,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {index + 1}
+                            </Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <TextField
+                                value={answers[question.id] || ""}
+                                onChange={(event) => updateAnswer(question.id, event.target.value)}
+                                fullWidth
+                                size="small"
+                                placeholder={`Type answer for ${index + 1}`}
+                                disabled={Boolean(result)}
+                                sx={{
+                                  bgcolor: "rgba(255,255,255,0.98)",
+                                  borderRadius: 2.5,
+                                  "& .MuiOutlinedInput-root": {
+                                    fontWeight: 800,
+                                    fontSize: 14,
+                                    color: checked?.isCorrect ? "success.main" : "text.primary",
+                                    "& fieldset": {
+                                      borderColor,
+                                      borderWidth: checked ? 2 : 1,
+                                    },
+                                    "&:hover fieldset": {
+                                      borderColor,
+                                    },
+                                    "&.Mui-focused fieldset": {
+                                      borderColor,
+                                    },
+                                  },
+                                }}
+                              />
+                              {checked ? (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: "inline-block",
+                                    mt: 0.5,
+                                    px: 0.9,
+                                    py: 0.25,
+                                    borderRadius: 999,
+                                    bgcolor: "rgba(255,255,255,0.95)",
+                                    fontWeight: 800,
+                                  }}
+                                  color={checked.isCorrect ? "success.main" : "warning.main"}
+                                >
+                                  {checked.isCorrect ? `Correct +${question.marks}` : `Answer: ${question.answer}`}
+                                </Typography>
+                              ) : null}
+                            </Box>
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                ) : null}
 
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
                   <Button

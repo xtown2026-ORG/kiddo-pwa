@@ -18,8 +18,9 @@ export default function MindScopePage() {
     <Container
       maxWidth="lg"
       sx={{
-        mt: 3,
-        pb: 10,
+        mt: { xs: 1.5, sm: 3 },
+        px: { xs: 1.25, sm: 3 },
+        pb: { xs: 9, sm: 10 },
       }}
     >
       <Stack spacing={3}>
@@ -64,10 +65,10 @@ export default function MindScopePage() {
         <Paper
           elevation={0}
           sx={{
-            borderRadius: 4,
-            border: "1px solid rgba(21, 101, 192, 0.12)",
+            borderRadius: { xs: 3, sm: 4 },
+            border: { xs: "1px solid rgba(226, 232, 240, 0.9)", sm: "1px solid rgba(21, 101, 192, 0.12)" },
             overflow: "hidden",
-            boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
+            boxShadow: { xs: "none", sm: "0 18px 42px rgba(15, 23, 42, 0.08)" },
           }}
         >
           <Tabs
@@ -80,9 +81,11 @@ export default function MindScopePage() {
               px: { xs: 1, sm: 2 },
               pt: 1,
               borderBottom: "1px solid",
-              borderColor: "divider",
+              borderColor: { xs: "#e2e8f0", sm: "divider" },
+              bgcolor: { xs: "#ffffff", sm: "transparent" },
               "& .MuiTab-root": {
-                minHeight: 72,
+                minHeight: { xs: 58, sm: 72 },
+                minWidth: { xs: 108, sm: 140 },
                 fontWeight: 800,
                 textTransform: "none",
                 color: "#31456a",
@@ -98,8 +101,8 @@ export default function MindScopePage() {
           </Tabs>
           <Box
             sx={{
-              p: { xs: 2, sm: 2.5 },
-              bgcolor: "#fcfdff",
+              p: { xs: 1.25, sm: 2.5 },
+              bgcolor: { xs: "#ffffff", sm: "#fcfdff" },
             }}
           >
             {activeTab === "grammar" ? <GrammarPanel /> : null}
