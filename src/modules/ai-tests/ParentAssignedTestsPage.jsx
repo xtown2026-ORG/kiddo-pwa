@@ -11,6 +11,7 @@ import {
 import SharedResultCard from "./SharedResultCard";
 import { getParentAssignedTests } from "./aiTests.api";
 import { useParentChild } from "../parents/ParentChildContext";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
 
 export default function ParentAssignedTestsPage() {
   const { selectedChild } = useParentChild();
@@ -43,6 +44,7 @@ export default function ParentAssignedTestsPage() {
           <Typography variant="body2" color="text.secondary">
             Clear updates on assigned tests, completion, and learning areas that need support.
           </Typography>
+          <ParentChildSwitcher label="Student" />
           {selectedChild?.name ? (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               Viewing results for {selectedChild.name}

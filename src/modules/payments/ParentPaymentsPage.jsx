@@ -20,6 +20,7 @@ import {
 import { getMyPaymentLogs } from "./payments.api";
 import { useNotifications } from "../notifications/useNotifications";
 import { useParentChild } from "../parents/ParentChildContext";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
 
 const isPaymentNotification = (item) => {
   const haystack = `${item?.title || ""} ${item?.message || ""}`.toLowerCase();
@@ -34,7 +35,9 @@ export default function ParentPaymentsPage() {
   const [schoolInfo, setSchoolInfo] = useState(null);
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
-  const { items: notifications, loading: notificationsLoading } = useNotifications();
+  const { items: notifications, loading: notificationsLoading } = useNotifications(
+    selectedChild?.id ? { student_id: selectedChild.id } : {}
+  );
 
   useEffect(() => {
     async function load() {
@@ -97,6 +100,7 @@ export default function ParentPaymentsPage() {
           {error}
         </Alert>
       )}
+      <ParentChildSwitcher label="Student" />
       {selectedChild?.name ? (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Viewing payments for {selectedChild.name}

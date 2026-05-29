@@ -24,6 +24,16 @@ function normalizeChild(item) {
   };
 }
 
+function dedupeChildren(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const id = Number(item?.id);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export function ParentChildProvider({ children }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -38,7 +48,7 @@ export function ParentChildProvider({ children }) {
         setLoading(true);
         const res = await getParentChildren({ limit: 50 });
         const nextItems = Array.isArray(res?.data?.data)
-          ? res.data.data.map(normalizeChild).filter((item) => item.id)
+          ? dedupeChildren(res.data.data.map(normalizeChild).filter((item) => item.id))
           : [];
         setItems(nextItems);
 

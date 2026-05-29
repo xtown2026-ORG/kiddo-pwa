@@ -13,6 +13,7 @@ import AttendanceCalendar from "./AttendanceCalendar";
 import { useAuth } from "../../auth/AuthProvider";
 import { useProfile } from "../profile/useProfile";
 import { useParentChild } from "../parents/ParentChildContext";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -64,6 +65,7 @@ export default function AttendancePage() {
     <Container maxWidth="sm" sx={{ mt: 4, pb: 4 }}>
       <Stack spacing={3}>
         <Typography variant="h6">Attendance</Typography>
+        {user?.role === "parent" ? <ParentChildSwitcher label="Student" /> : null}
         <Typography variant="body2" color="text.secondary">
           Student Name: {studentName}
         </Typography>

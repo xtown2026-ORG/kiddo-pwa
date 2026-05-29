@@ -1,7 +1,9 @@
 import { Alert, Container, Grid, Stack, Typography } from "@mui/material";
 import DashboardCard from "./DashboardCard";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export default function ParentDashboard({ data }) {
+  const { children } = useParentChild();
   const dashboardItems = Array.isArray(data?.data) ? data.data : [];
   const notifications = Array.isArray(data?.notifications?.items) ? data.notifications.items : [];
   const unreadNotifications = notifications.filter((n) => !n.is_acknowledged).length;
@@ -75,6 +77,11 @@ export default function ParentDashboard({ data }) {
           <Typography variant="body2" color="text.secondary">
             Balance: {paymentSummary.totalBalance ?? 0} | Paid: {paymentSummary.totalPaid ?? 0} | Unread Notices: {unreadNotifications}
           </Typography>
+          {children.length ? (
+            <Typography variant="body2" color="text.secondary">
+              Linked Students: {children.map((child) => child.name).join(", ")}
+            </Typography>
+          ) : null}
         </Stack>
       </Stack>
     </Container>

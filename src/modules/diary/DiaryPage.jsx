@@ -18,6 +18,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import CreateHomeworkDialog from "./CreateHomeworkDialog";
 import DatePickerField from "../../components/DatePickerField";
 import { useParentChild } from "../parents/ParentChildContext";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
 
 export default function DiaryPage() {
   const { user } = useAuth();
@@ -60,6 +61,7 @@ export default function DiaryPage() {
       <Typography variant="h5" fontWeight="bold" sx={{ mb: 3 }}>
         My Diary
       </Typography>
+      {user?.role === "parent" ? <ParentChildSwitcher label="Student" /> : null}
       {user?.role === "parent" && selectedChild?.name ? (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Viewing diary for {selectedChild.name}

@@ -30,7 +30,6 @@ import {
   Remove,
   Search,
   TaskAlt,
-  TipsAndUpdates,
 } from "@mui/icons-material";
 import { askAiQuestion } from "../../ai-chat/api/aiChat.api";
 
@@ -44,18 +43,18 @@ const mapPhotos = [
     practiceAspectRatio: "862 / 1000",
     accent: "#1565c0",
     questions: [
-      { id: "india-1", label: "North India", answer: "north india", marks: 2, x: 46, y: 22 },
-      { id: "india-2", label: "West India", answer: "west india", marks: 2, x: 28, y: 47 },
-      { id: "india-3", label: "East India", answer: "east india", marks: 2, x: 69, y: 43 },
-      { id: "india-4", label: "South India", answer: "south india", marks: 2, x: 44, y: 76 },
-      { id: "india-5", label: "Island Territories", answer: "island territories", marks: 2, x: 78, y: 75 },
-      { id: "india-6", label: "Rajasthan", answer: "rajasthan", marks: 2, x: 26, y: 40 },
-      { id: "india-7", label: "Gujarat", answer: "gujarat", marks: 2, x: 25, y: 53 },
-      { id: "india-8", label: "Maharashtra", answer: "maharashtra", marks: 2, x: 36, y: 60 },
-      { id: "india-9", label: "Tamil Nadu", answer: "tamil nadu", marks: 2, x: 45, y: 83 },
+      { id: "india-1", label: "North India", answer: "north india", marks: 2, x: 46, y: 23 },
+      { id: "india-2", label: "West India", answer: "west india", marks: 2, x: 27, y: 49 },
+      { id: "india-3", label: "East India", answer: "east india", marks: 2, x: 61, y: 52 },
+      { id: "india-4", label: "South India", answer: "south india", marks: 2, x: 43, y: 79 },
+      { id: "india-5", label: "Island Territories", answer: "island territories", marks: 2, x: 67, y: 80 },
+      { id: "india-6", label: "Rajasthan", answer: "rajasthan", marks: 2, x: 28, y: 41 },
+      { id: "india-7", label: "Gujarat", answer: "gujarat", marks: 2, x: 24, y: 55 },
+      { id: "india-8", label: "Maharashtra", answer: "maharashtra", marks: 2, x: 33, y: 63 },
+      { id: "india-9", label: "Tamil Nadu", answer: "tamil nadu", marks: 2, x: 44, y: 86 },
       { id: "india-10", label: "Assam", answer: "assam", marks: 2, x: 76, y: 36 },
-      { id: "india-11", label: "Odisha", answer: "odisha", marks: 2, x: 57, y: 56 },
-      { id: "india-12", label: "Kerala", answer: "kerala", marks: 2, x: 39, y: 84 },
+      { id: "india-11", label: "Odisha", answer: "odisha", marks: 2, x: 57, y: 57 },
+      { id: "india-12", label: "Kerala", answer: "kerala", marks: 2, x: 38, y: 83 },
     ],
   },
   {
@@ -86,6 +85,8 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || "gemini-1.5-flash";
 const EMPTY_MAP_RESULT = { mapId: "", title: "", subtitle: "", markers: [], suggestedQueries: [] };
 const DEFAULT_VIEWPORT = { zoom: 1, focusX: 50, focusY: 50 };
+const MIN_ZOOM = 0.85;
+const MAX_ZOOM = 1.85;
 
 const SEARCH_SUGGESTIONS = [
   "Show major ports in India",
@@ -597,6 +598,10 @@ function tryParseJson(rawText) {
   return null;
 }
 
+function isEnglishOnlyText(value) {
+  return /^[\x00-\x7F]*$/.test(String(value || ""));
+}
+
 function buildFallbackSummary() {
   return FALLBACK_TOPICS.map((topic) => ({
     id: topic.id,
@@ -657,6 +662,7 @@ Response format:
 
 Rules:
 - Return valid JSON only.
+- Use English only for every title, subtitle, label, detail, and suggestion.
 - Use only "india" or "world-ocean" as mapId.
 - If the query is broad, mark multiple textbook-relevant places.
 - If the query is specific, return only the precise answer region or location.
@@ -740,7 +746,7 @@ function computeViewport(markers = []) {
   const spread = Math.max(spanX, spanY);
 
   return {
-    zoom: Math.max(1, Math.min(1.8, 90 / spread)),
+    zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, 90 / spread)),
     focusX: Math.max(18, Math.min(82, (minX + maxX) / 2)),
     focusY: Math.max(18, Math.min(82, (minY + maxY) / 2)),
   };
@@ -833,80 +839,104 @@ function getLabelPreferences(marker) {
   return [...new Set(preferences)];
 }
 
-function layoutIndiaSideColumnMarkers(markers = []) {
+function resolveLabelPositionFromRect(marker, rect) {
+  const centerX = (rect.left + rect.right) / 2;
+  const centerY = (rect.top + rect.bottom) / 2;
+  const deltaX = centerX - marker.x;
+  const deltaY = centerY - marker.y;
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0 ? "right" : "left";
+  }
+
+  return deltaY >= 0 ? "bottom" : "top";
+}
+
+function buildFixedLabelRect(marker, mapId) {
+  const size = estimateLabelSize(marker, mapId);
+  const labelX = Number.isFinite(Number(marker.labelX))
+    ? Number(marker.labelX)
+    : marker.x <= 50
+      ? marker.x + 8
+      : marker.x - 8;
+  const labelY = Number.isFinite(Number(marker.labelY))
+    ? Number(marker.labelY)
+    : marker.y;
+  const width = clamp(Math.max(size.width, mapId === "india" ? 12.5 : 10), 10, mapId === "india" ? 22 : 18);
+  const height = size.height;
+  const alignedLeft =
+    marker.textAlign === "right"
+      ? labelX - width
+      : labelX - width / 2;
+
+  return clampRectToBounds(
+    {
+      left: alignedLeft,
+      right: alignedLeft + width,
+      top: labelY - height / 2,
+      bottom: labelY + height / 2,
+    },
+    width,
+    height
+  );
+}
+
+function withRectOffset(rect, offsetX, offsetY, width, height) {
+  return clampRectToBounds(
+    {
+      left: rect.left + offsetX,
+      right: rect.right + offsetX,
+      top: rect.top + offsetY,
+      bottom: rect.bottom + offsetY,
+    },
+    width,
+    height
+  );
+}
+
+function layoutIndiaPointerMarkers(markers = []) {
   const placedRects = [];
-  const labelHeight = 5.6;
-  const leftMarkers = markers
-    .filter((marker) => marker.x <= 50)
-    .sort((left, right) => left.y - right.y);
-  const rightMarkers = markers
-    .filter((marker) => marker.x > 50)
-    .sort((left, right) => left.y - right.y);
 
-  const buildColumnRects = (columnMarkers, side) => {
-    if (!columnMarkers.length) return [];
+  return [...markers]
+    .sort((left, right) => left.y - right.y)
+    .map((marker) => {
+      const baseRect = buildFixedLabelRect(marker, "india");
+      const width = baseRect.width || baseRect.right - baseRect.left;
+      const height = baseRect.height || baseRect.bottom - baseRect.top;
+      const sideDirection = marker.x <= 50 ? -1 : 1;
+      const verticalDirection = marker.y <= 50 ? 1 : -1;
+      const offsetCandidates = [
+        [0, 0],
+        [0, 3.2 * verticalDirection],
+        [0, -3.2 * verticalDirection],
+        [2.2 * sideDirection, 0],
+        [2.2 * sideDirection, 3 * verticalDirection],
+        [2.2 * sideDirection, -3 * verticalDirection],
+        [4.2 * sideDirection, 0],
+        [4.2 * sideDirection, 3 * verticalDirection],
+        [4.2 * sideDirection, -3 * verticalDirection],
+      ];
 
-    const startTop = 16;
-    const endTop = 78;
-    const step =
-      columnMarkers.length > 1 ? (endTop - startTop) / (columnMarkers.length - 1) : 0;
+      const laidOutRect =
+        offsetCandidates
+          .map(([offsetX, offsetY]) => withRectOffset(baseRect, offsetX, offsetY, width, height))
+          .find((candidateRect) => !placedRects.some((placed) => rectsOverlap(candidateRect, placed, 0.85))) ||
+        withRectOffset(baseRect, 4.8 * sideDirection, 3.2 * verticalDirection, width, height);
 
-    return columnMarkers.map((marker, index) => {
-      const size = estimateLabelSize(marker, "india");
-      const top = clamp(startTop + step * index, 8, 92 - labelHeight);
-      const width = clamp(Math.max(size.width, 14), 14, 24);
-      const rect =
-        side === "left"
-          ? {
-              left: 4,
-              right: 4 + width,
-              top,
-              bottom: top + labelHeight,
-              width,
-              height: labelHeight,
-            }
-          : {
-              left: 72,
-              right: 72 + width,
-              top,
-              bottom: top + labelHeight,
-              width,
-              height: labelHeight,
-            };
-
-      const adjustedTop = (() => {
-        const overlapping = placedRects.find((placed) => rectsOverlap(rect, placed, 0.4));
-        if (!overlapping) return rect.top;
-        return Math.min(92 - labelHeight, overlapping.bottom + 0.8);
-      })();
-
-      const finalRect = {
-        ...rect,
-        top: adjustedTop,
-        bottom: adjustedTop + labelHeight,
-      };
-
-      placedRects.push(finalRect);
+      placedRects.push(laidOutRect);
 
       return {
         ...marker,
-        labelPosition: side === "left" ? "right" : "left",
-        labelBox: finalRect,
+        labelBox: laidOutRect,
+        labelPosition: resolveLabelPositionFromRect(marker, laidOutRect),
       };
-    });
-  };
-
-  const laidOut = [
-    ...buildColumnRects(leftMarkers, "left"),
-    ...buildColumnRects(rightMarkers, "right"),
-  ];
-
-  return markers.map((marker) => laidOut.find((item) => item.id === marker.id) || marker);
+    })
+    .sort((left, right) => markers.findIndex((item) => item.id === left.id) - markers.findIndex((item) => item.id === right.id));
 }
 
 function layoutMarkers(markers = [], mapId) {
   if (mapId === "india" && markers.length > 1) {
-    return layoutIndiaSideColumnMarkers(markers);
+    return layoutIndiaPointerMarkers(markers);
   }
 
   const placedRects = [];
@@ -942,6 +972,82 @@ function layoutMarkers(markers = [], mapId) {
       labelBox: bestCandidate.rect,
     };
   });
+}
+
+function layoutPracticeIndicators(questions = [], mapId, isMobile = false) {
+  const placedRects = [];
+  const bubbleSize = isMobile ? 11.5 : 9.2;
+  const bubbleHalf = bubbleSize / 2;
+  const offsetDistance = mapId === "india" ? (isMobile ? 11 : 9) : isMobile ? 9 : 7;
+
+  return questions.map((question) => {
+    const baseX = Number(question.x);
+    const baseY = Number(question.y);
+    const candidateOffsets = [
+      [0, 0],
+      [-offsetDistance, 0],
+      [offsetDistance, 0],
+      [0, -offsetDistance],
+      [0, offsetDistance],
+      [-offsetDistance * 0.75, -offsetDistance * 0.8],
+      [offsetDistance * 0.75, -offsetDistance * 0.8],
+      [-offsetDistance * 0.75, offsetDistance * 0.8],
+      [offsetDistance * 0.75, offsetDistance * 0.8],
+    ];
+
+    const bubbleRect =
+      candidateOffsets
+        .map(([offsetX, offsetY]) =>
+          clampRectToBounds(
+            {
+              left: baseX + offsetX - bubbleHalf,
+              right: baseX + offsetX + bubbleHalf,
+              top: baseY + offsetY - bubbleHalf,
+              bottom: baseY + offsetY + bubbleHalf,
+            },
+            bubbleSize,
+            bubbleSize
+          )
+        )
+        .find((candidate) => !placedRects.some((placed) => rectsOverlap(candidate, placed, isMobile ? 1.1 : 0.9))) ||
+      clampRectToBounds(
+        {
+          left: baseX - bubbleHalf,
+          right: baseX + bubbleHalf,
+          top: baseY - bubbleHalf,
+          bottom: baseY + bubbleHalf,
+        },
+        bubbleSize,
+        bubbleSize
+      );
+
+    placedRects.push(bubbleRect);
+
+    return {
+      ...question,
+      markerX: baseX,
+      markerY: baseY,
+      bubbleX: (bubbleRect.left + bubbleRect.right) / 2,
+      bubbleY: (bubbleRect.top + bubbleRect.bottom) / 2,
+      bubbleSize,
+    };
+  });
+}
+
+function buildZoomTransform(scale, origin = { x: 50, y: 50 }) {
+  const safeScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(scale) || 1));
+  const originX = clamp(Number(origin?.x) || 50, 0, 100);
+  const originY = clamp(Number(origin?.y) || 50, 0, 100);
+  const translateX = 50 - originX;
+  const translateY = 50 - originY;
+
+  return {
+    scale: safeScale,
+    originX,
+    originY,
+    transformOrigin: `${originX}% ${originY}%`,
+    transform: `translate(${translateX}%, ${translateY}%) scale(${safeScale})`,
+  };
 }
 
 function resolveLocalMapSearch(query) {
@@ -1038,6 +1144,8 @@ function sanitizeMapResult(result) {
       (marker) =>
         marker &&
         marker.label &&
+        isEnglishOnlyText(marker.label) &&
+        isEnglishOnlyText(marker.detail || "") &&
         Number.isFinite(Number(marker.x)) &&
         Number.isFinite(Number(marker.y)) &&
         Number.isFinite(Number(marker.labelX)) &&
@@ -1061,9 +1169,14 @@ function sanitizeMapResult(result) {
 
   return {
     mapId: result.mapId,
-    title: result.title || "Marked Places",
-    subtitle: result.subtitle || "AI-matched geography answer",
-    suggestedQueries: Array.isArray(result.suggestedQueries) ? result.suggestedQueries.slice(0, 3) : [],
+    title: isEnglishOnlyText(result.title) && result.title ? result.title : "Marked Places",
+    subtitle:
+      isEnglishOnlyText(result.subtitle) && result.subtitle
+        ? result.subtitle
+        : "AI-matched geography answer",
+    suggestedQueries: Array.isArray(result.suggestedQueries)
+      ? result.suggestedQueries.filter((item) => isEnglishOnlyText(item)).slice(0, 3)
+      : [],
     markers,
   };
 }
@@ -1174,8 +1287,8 @@ function MapMarker({ marker, color, onSelect }) {
   const deltaY = anchorY - marker.y;
   const connectorLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
   const connectorAngle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
-  const showConnector = connectorLength > 2.4;
-  const showOverlayLabel = false;
+  const showConnector = connectorLength > 1.8;
+  const showOverlayLabel = true;
 
   return (
     <Tooltip
@@ -1256,14 +1369,21 @@ function MapMarker({ marker, color, onSelect }) {
             position: "absolute",
             left: `${marker.x}%`,
             top: `${marker.y}%`,
-            transform: "translate(-50%, -50%)",
-            width: 16,
-            height: 16,
-            borderRadius: "50%",
+            transform: "translate(-50%, -95%) rotate(-45deg)",
+            width: 18,
+            height: 18,
+            borderRadius: "50% 50% 50% 0",
             bgcolor: color,
-            border: "3px solid white",
-            boxShadow: `0 10px 22px ${alpha(color, 0.42)}`,
+            border: "2px solid white",
+            boxShadow: `0 12px 24px ${alpha(color, 0.32)}`,
             zIndex: 3,
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              inset: 4,
+              borderRadius: "50%",
+              backgroundColor: "rgba(255,255,255,0.92)",
+            },
           }}
         />
         <Box
@@ -1280,14 +1400,14 @@ function MapMarker({ marker, color, onSelect }) {
             zIndex: 2,
           }}
         />
-        {showConnector && showOverlayLabel ? (
+        {showConnector ? (
           <Box
             sx={{
               position: "absolute",
               left: `${marker.x}%`,
               top: `${marker.y}%`,
-              width: `calc(${connectorLength}% - 10px)`,
-              borderTop: `2px dotted ${alpha(color, 0.9)}`,
+              width: `calc(${connectorLength}% - 8px)`,
+              borderTop: `1.8px solid ${alpha(color, 0.75)}`,
               transform: `translateY(-50%) rotate(${connectorAngle}deg)`,
               transformOrigin: "left center",
               zIndex: 1,
@@ -1310,13 +1430,13 @@ function MapMarker({ marker, color, onSelect }) {
               justifyContent: marker.labelPosition === "left" ? "flex-end" : marker.labelPosition === "right" ? "flex-start" : "center",
               borderRadius: 1.8,
               color: "#0b2545",
-              bgcolor: "rgba(255,255,255,0.92)",
-              backdropFilter: "blur(10px)",
-              border: `1px solid ${alpha(color, 0.25)}`,
-              boxShadow: "0 12px 26px rgba(15, 23, 42, 0.12)",
-              fontWeight: 900,
-              fontSize: { xs: "0.68rem", sm: "0.76rem" },
-              lineHeight: 1.05,
+              bgcolor: "rgba(255,255,255,0.96)",
+              backdropFilter: "blur(12px)",
+              border: `1px solid ${alpha(color, 0.22)}`,
+              boxShadow: "0 14px 28px rgba(15, 23, 42, 0.12)",
+              fontWeight: 800,
+              fontSize: { xs: "0.62rem", sm: "0.76rem" },
+              lineHeight: 1,
               textAlign: "center",
               letterSpacing: "-0.01em",
               zIndex: 4,
@@ -1334,7 +1454,11 @@ function MapMarker({ marker, color, onSelect }) {
 function InteractiveMapCard({
   map,
   zoom,
+  zoomOrigin,
   onZoomChange,
+  onPinchStart,
+  onPinchMove,
+  onPinchEnd,
   onPractice,
   isPracticeOpen,
   isActiveSearch,
@@ -1345,14 +1469,17 @@ function InteractiveMapCard({
   const [selectedMarkerId, setSelectedMarkerId] = useState("");
   const markers = isActiveSearch && !isPracticeOpen ? searchResult.markers : [];
   const laidOutMarkers = useMemo(() => layoutMarkers(markers, map.id), [markers, map.id]);
-  const finalScale = Math.min(2, Math.max(1, zoom));
+  const zoomTransform = useMemo(
+    () => buildZoomTransform(zoom, zoomOrigin),
+    [zoom, zoomOrigin]
+  );
   const cardAccent = map.accent;
   const shouldShowSearchSummary = false;
-  const shouldShowSearchLegend = !isMobile && isActiveSearch && searchResult.markers.length;
   const selectedMarker = useMemo(
     () => laidOutMarkers.find((marker) => marker.id === selectedMarkerId) || null,
     [laidOutMarkers, selectedMarkerId]
   );
+  const zoomPercent = Math.round(zoomTransform.scale * 100);
 
   useEffect(() => {
     if (!laidOutMarkers.some((marker) => marker.id === selectedMarkerId)) {
@@ -1434,7 +1561,7 @@ function InteractiveMapCard({
             <IconButton
               size="small"
               onClick={() => onZoomChange(map.id, zoom - 0.15)}
-              disabled={zoom <= 1}
+              disabled={zoom <= MIN_ZOOM}
               aria-label={`Zoom out ${map.title}`}
               sx={{ bgcolor: "rgba(255,255,255,0.7)" }}
             >
@@ -1442,7 +1569,7 @@ function InteractiveMapCard({
             </IconButton>
             <Chip
               size="small"
-              label={`${Math.round(finalScale * 100)}%`}
+              label={`${zoomPercent}%`}
               sx={{
                 fontWeight: 800,
                 bgcolor: "rgba(255,255,255,0.78)",
@@ -1451,7 +1578,7 @@ function InteractiveMapCard({
             <IconButton
               size="small"
               onClick={() => onZoomChange(map.id, zoom + 0.15)}
-              disabled={zoom >= 1.6}
+              disabled={zoom >= MAX_ZOOM}
               aria-label={`Zoom in ${map.title}`}
               sx={{ bgcolor: "rgba(255,255,255,0.7)" }}
             >
@@ -1459,7 +1586,10 @@ function InteractiveMapCard({
             </IconButton>
             <IconButton
               size="small"
-              onClick={() => onZoomChange(map.id, 1)}
+              onClick={() => {
+                onZoomChange(map.id, 1);
+                onPinchEnd?.(map.id);
+              }}
               aria-label={`Reset zoom ${map.title}`}
               sx={{ bgcolor: "rgba(255,255,255,0.7)" }}
             >
@@ -1475,7 +1605,7 @@ function InteractiveMapCard({
             borderRadius: { xs: 3, sm: 5 },
             bgcolor: isMobile ? "#f8fbff" : "#eef6ff",
             border: `1px solid ${alpha(cardAccent, 0.15)}`,
-            height: { xs: 235, sm: 430, md: 520 },
+            height: { xs: map.id === "india" ? 360 : 250, sm: 430, md: 520 },
           }}
         >
           <Box
@@ -1491,10 +1621,14 @@ function InteractiveMapCard({
             sx={{
               position: "absolute",
               inset: 0,
-              transform: `scale(${finalScale})`,
-              transformOrigin: "center center",
+              transform: zoomTransform.transform,
+              transformOrigin: zoomTransform.transformOrigin,
               transition: "transform 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+              touchAction: "none",
             }}
+            onTouchStart={(event) => onPinchStart?.(map.id, event)}
+            onTouchMove={(event) => onPinchMove?.(map.id, event)}
+            onTouchEnd={() => onPinchEnd?.(map.id)}
           >
             <Box
               component="img"
@@ -1523,6 +1657,43 @@ function InteractiveMapCard({
                 onSelect={() => setSelectedMarkerId(marker.id)}
               />
             ))}
+
+            {selectedMarker ? (
+              <Box
+                sx={{
+                  position: "absolute",
+                  left: { xs: 10, sm: 16 },
+                  right: { xs: 10, sm: 16 },
+                  bottom: { xs: 10, sm: 16 },
+                  zIndex: 6,
+                  p: { xs: 1.1, sm: 1.35 },
+                  borderRadius: 3,
+                  bgcolor: "rgba(255,255,255,0.94)",
+                  backdropFilter: "blur(14px)",
+                  border: `1px solid ${alpha(cardAccent, 0.22)}`,
+                  boxShadow: "0 16px 32px rgba(15, 23, 42, 0.12)",
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
+                      {selectedMarker.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.35 }}>
+                      {selectedMarker.detail}
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={() => setSelectedMarkerId("")}
+                    aria-label={`Close details for ${selectedMarker.label}`}
+                    sx={{ mt: -0.5, mr: -0.5 }}
+                  >
+                    <Close fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Box>
+            ) : null}
           </Box>
 
           {shouldShowSearchSummary ? (
@@ -1550,96 +1721,6 @@ function InteractiveMapCard({
           ) : null}
         </Box>
 
-        {isMobile && selectedMarker ? (
-          <Box
-            sx={{
-              borderRadius: { xs: 3, sm: 4 },
-              p: 1.2,
-              bgcolor: "rgba(255,255,255,0.96)",
-              border: `1px solid ${alpha(cardAccent, 0.18)}`,
-              boxShadow: isMobile ? "none" : "0 18px 36px rgba(15, 23, 42, 0.1)",
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
-                  {selectedMarker.label}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.35 }}>
-                  {selectedMarker.detail}
-                </Typography>
-              </Box>
-              <IconButton
-                size="small"
-                onClick={() => setSelectedMarkerId("")}
-                aria-label={`Close details for ${selectedMarker.label}`}
-                sx={{ mt: -0.5, mr: -0.5 }}
-              >
-                <Close fontSize="small" />
-              </IconButton>
-            </Stack>
-          </Box>
-        ) : null}
-
-        {shouldShowSearchLegend ? (
-          <Box
-            sx={{
-              borderRadius: 4,
-              p: 1.1,
-              bgcolor: alpha(cardAccent, 0.05),
-              border: `1px solid ${alpha(cardAccent, 0.12)}`,
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
-              <TipsAndUpdates sx={{ color: cardAccent, fontSize: 18 }} />
-              <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
-                {isPracticeOpen ? "Search results" : "Hover any label for details"}
-              </Typography>
-            </Stack>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                gap: 0.8,
-              }}
-            >
-              {searchResult.markers.map((marker) => (
-                <Box
-                  key={`${marker.id}-legend`}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    px: 1,
-                    py: 0.7,
-                    borderRadius: 3,
-                    bgcolor: "rgba(255,255,255,0.84)",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: "50%",
-                      bgcolor: cardAccent,
-                      boxShadow: `0 0 0 6px ${alpha(cardAccent, 0.14)}`,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <Box>
-                    <Typography variant="body2" fontWeight={800} color="#0b2a55" lineHeight={1.05}>
-                      {marker.label}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" lineHeight={1.05}>
-                      {marker.detail}
-                    </Typography>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        ) : null}
-
         <Button
           variant="contained"
           startIcon={<TaskAlt />}
@@ -1666,8 +1747,13 @@ export default function MapsPanel() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const practiceSectionRef = useRef(null);
+  const searchCacheRef = useRef(new Map());
+  const pinchStateRef = useRef({});
   const [zooms, setZooms] = useState(() =>
     mapPhotos.reduce((items, map) => ({ ...items, [map.id]: 1 }), {})
+  );
+  const [zoomOrigins, setZoomOrigins] = useState(() =>
+    mapPhotos.reduce((items, map) => ({ ...items, [map.id]: { x: 50, y: 50 } }), {})
   );
   const [searchText, setSearchText] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
@@ -1697,12 +1783,23 @@ export default function MapsPanel() {
           : selectPracticeQuestions(practiceMap.questions, practiceRound),
     [focusedPracticeQuestions, practiceMap, practiceMode, practiceRound]
   );
+  const laidOutPracticeQuestions = useMemo(
+    () => layoutPracticeIndicators(practiceQuestions, practiceMap?.id || "", isMobile),
+    [isMobile, practiceMap?.id, practiceQuestions]
+  );
   const practiceViewport = useMemo(
     () =>
       practiceMode === "focused" && focusedPracticeQuestions.length
         ? computeViewport(focusedPracticeQuestions)
         : DEFAULT_VIEWPORT,
     [focusedPracticeQuestions, practiceMode]
+  );
+  const practiceResetZoom = useMemo(
+    () =>
+      practiceMode === "focused"
+        ? Math.max(1, Math.min(MAX_ZOOM, Number(practiceViewport.zoom) || 1))
+        : 1,
+    [practiceMode, practiceViewport.zoom]
   );
   const activeSearchMapId = mapSearchResult.mapId || "";
   const activeSearchMap = activeSearchMapId ? MAP_BY_ID[activeSearchMapId] : null;
@@ -1717,34 +1814,47 @@ export default function MapsPanel() {
 
   useEffect(() => {
     let ignore = false;
+    const trimmedSearch = submittedSearch.trim().toLowerCase();
 
-    if (!submittedSearch.trim()) {
+    if (!trimmedSearch) {
       setMapSearchResult(EMPTY_MAP_RESULT);
       setIsMapSearching(false);
       return undefined;
     }
 
-    setIsMapSearching(true);
+    const immediateResult = resolveLocalMapSearch(trimmedSearch);
+    if (immediateResult.markers.length) {
+      setMapSearchResult(immediateResult);
+    }
+
+    const cachedResult = searchCacheRef.current.get(trimmedSearch);
+    if (cachedResult) {
+      setMapSearchResult(cachedResult);
+      setIsMapSearching(false);
+      return undefined;
+    }
+
+    setIsMapSearching(!immediateResult.markers.length);
 
     const timer = setTimeout(async () => {
       try {
-        const aiResult = await askAiForMapSearch(submittedSearch.trim());
+        const aiResult = await askAiForMapSearch(trimmedSearch);
         if (ignore) return;
 
         const sanitized = sanitizeMapResult(aiResult);
-        setMapSearchResult(
-          sanitized.markers.length ? sanitized : resolveLocalMapSearch(submittedSearch.trim())
-        );
+        const finalResult = sanitized.markers.length ? sanitized : immediateResult;
+        searchCacheRef.current.set(trimmedSearch, finalResult);
+        setMapSearchResult(finalResult);
       } catch {
         if (!ignore) {
-          setMapSearchResult(resolveLocalMapSearch(submittedSearch.trim()));
+          setMapSearchResult(immediateResult);
         }
       } finally {
         if (!ignore) {
           setIsMapSearching(false);
         }
       }
-    }, 280);
+    }, immediateResult.markers.length ? 0 : 120);
 
     return () => {
       ignore = true;
@@ -1768,8 +1878,61 @@ export default function MapsPanel() {
   const changeZoom = (mapId, nextZoom) => {
     setZooms((current) => ({
       ...current,
-      [mapId]: Math.min(1.6, Math.max(1, nextZoom)),
+      [mapId]: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom)),
     }));
+  };
+
+  const setZoomOrigin = (mapId, x, y) => {
+    setZoomOrigins((current) => ({
+      ...current,
+      [mapId]: {
+        x: clamp(x, 18, 82),
+        y: clamp(y, 18, 82),
+      },
+    }));
+  };
+
+  const resetMapView = (mapId, focusX = 50, focusY = 50, zoomLevel = 1) => {
+    changeZoom(mapId, zoomLevel);
+    setZoomOrigin(mapId, focusX, focusY);
+  };
+
+  const handlePinchStart = (mapId, event) => {
+    if (event.touches.length !== 2) return;
+    const touchA = event.touches[0];
+    const touchB = event.touches[1];
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = ((touchA.clientX + touchB.clientX) / 2 - rect.left) / rect.width * 100;
+    const centerY = ((touchA.clientY + touchB.clientY) / 2 - rect.top) / rect.height * 100;
+    const distance = Math.hypot(touchA.clientX - touchB.clientX, touchA.clientY - touchB.clientY);
+
+    pinchStateRef.current[mapId] = {
+      distance,
+      zoom: zooms[mapId] || 1,
+    };
+    setZoomOrigin(mapId, centerX, centerY);
+  };
+
+  const handlePinchMove = (mapId, event) => {
+    if (event.touches.length !== 2) return;
+    const pinchState = pinchStateRef.current[mapId];
+    if (!pinchState?.distance) return;
+
+    event.preventDefault();
+    const touchA = event.touches[0];
+    const touchB = event.touches[1];
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = ((touchA.clientX + touchB.clientX) / 2 - rect.left) / rect.width * 100;
+    const centerY = ((touchA.clientY + touchB.clientY) / 2 - rect.top) / rect.height * 100;
+    const distance = Math.hypot(touchA.clientX - touchB.clientX, touchA.clientY - touchB.clientY);
+    const nextZoom = pinchState.zoom * (distance / pinchState.distance);
+
+    setZoomOrigin(mapId, centerX, centerY);
+    changeZoom(mapId, nextZoom);
+  };
+
+  const handlePinchEnd = (mapId) => {
+    pinchStateRef.current[mapId] = null;
   };
 
   const startPractice = (mapId) => {
@@ -1777,6 +1940,9 @@ export default function MapsPanel() {
       activeSearchMapId === mapId &&
       Array.isArray(mapSearchResult.markers) &&
       mapSearchResult.markers.length > 0;
+    const focusedViewport = shouldUseFocusedMode
+      ? computeViewport(buildFocusedPracticeQuestions(mapSearchResult.markers))
+      : DEFAULT_VIEWPORT;
 
     setPracticeMapId(mapId);
     setPracticeMode(shouldUseFocusedMode ? "focused" : "default");
@@ -1790,6 +1956,13 @@ export default function MapsPanel() {
             searchQuery: submittedSearch.trim(),
           }
         : null
+    );
+    setZoomOrigin(mapId, focusedViewport.focusX || 50, focusedViewport.focusY || 50);
+    changeZoom(
+      mapId,
+      shouldUseFocusedMode
+        ? Math.max(1, Math.min(MAX_ZOOM, Number(focusedViewport.zoom) || 1))
+        : 1
     );
     setPracticeRound((current) => current + 1);
     setAnswers({});
@@ -1843,8 +2016,12 @@ export default function MapsPanel() {
     });
   };
 
-  const practiceScale = (zooms[practiceMapId] || 1) * (practiceViewport.zoom || 1);
-  const practiceTransformOrigin = `${practiceViewport.focusX || 50}% ${practiceViewport.focusY || 50}%`;
+  const practiceScale = zooms[practiceMapId] || practiceResetZoom;
+  const practiceOrigin = zoomOrigins[practiceMapId] || {
+    x: practiceViewport.focusX || 50,
+    y: practiceViewport.focusY || 50,
+  };
+  const practiceZoomTransform = buildZoomTransform(practiceScale, practiceOrigin);
 
   return (
     <Card
@@ -2061,7 +2238,11 @@ export default function MapsPanel() {
                   <InteractiveMapCard
                     map={map}
                     zoom={zooms[map.id] || 1}
+                    zoomOrigin={zoomOrigins[map.id]}
                     onZoomChange={changeZoom}
+                    onPinchStart={handlePinchStart}
+                    onPinchMove={handlePinchMove}
+                    onPinchEnd={handlePinchEnd}
                     onPractice={startPractice}
                     isPracticeOpen={isPracticeOpen}
                     isActiveSearch={activeSearchMapId === map.id}
@@ -2109,27 +2290,34 @@ export default function MapsPanel() {
                     <IconButton
                       size="small"
                       onClick={() => changeZoom(practiceMap.id, (zooms[practiceMap.id] || 1) - 0.15)}
-                      disabled={(zooms[practiceMap.id] || 1) <= 1}
+                      disabled={(zooms[practiceMap.id] || 1) <= MIN_ZOOM}
                       aria-label={`Zoom out ${practiceMap.title} practice`}
                     >
                       <Remove fontSize="small" />
                     </IconButton>
                     <Chip
                       size="small"
-                      label={`${Math.round(practiceScale * 100)}%`}
+                      label={`${Math.round(practiceZoomTransform.scale * 100)}%`}
                       sx={{ fontWeight: 800 }}
                     />
                     <IconButton
                       size="small"
                       onClick={() => changeZoom(practiceMap.id, (zooms[practiceMap.id] || 1) + 0.15)}
-                      disabled={(zooms[practiceMap.id] || 1) >= 1.6}
+                      disabled={(zooms[practiceMap.id] || 1) >= MAX_ZOOM}
                       aria-label={`Zoom in ${practiceMap.title} practice`}
                     >
                       <Add fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={() => changeZoom(practiceMap.id, 1)}
+                      onClick={() =>
+                        resetMapView(
+                          practiceMap.id,
+                          practiceViewport.focusX || 50,
+                          practiceViewport.focusY || 50,
+                          practiceResetZoom
+                        )
+                      }
                       aria-label={`Reset zoom ${practiceMap.title} practice`}
                     >
                       <RestartAlt fontSize="small" />
@@ -2168,14 +2356,18 @@ export default function MapsPanel() {
                       bgcolor: "white",
                       borderRadius: 3,
                       overflow: "hidden",
+                      touchAction: "none",
                     }}
+                    onTouchStart={(event) => handlePinchStart(practiceMap.id, event)}
+                    onTouchMove={(event) => handlePinchMove(practiceMap.id, event)}
+                    onTouchEnd={() => handlePinchEnd(practiceMap.id)}
                   >
                     <Box
                       sx={{
                         position: "absolute",
                         inset: 0,
-                        transform: `scale(${practiceScale})`,
-                        transformOrigin: practiceTransformOrigin,
+                        transform: practiceZoomTransform.transform,
+                        transformOrigin: practiceZoomTransform.transformOrigin,
                         transition: "transform 320ms ease",
                       }}
                     >
@@ -2193,41 +2385,82 @@ export default function MapsPanel() {
                         }}
                       />
 
-                      {practiceQuestions.map((question, index) => {
+                      {laidOutPracticeQuestions.map((question, index) => {
                         const checked = result?.checked.find((item) => item.id === question.id);
+                        const connectorLength = Math.hypot(
+                          Number(question.markerX) - Number(question.bubbleX),
+                          Number(question.markerY) - Number(question.bubbleY)
+                        );
+                        const connectorAngle =
+                          (Math.atan2(
+                            Number(question.markerY) - Number(question.bubbleY),
+                            Number(question.markerX) - Number(question.bubbleX)
+                          ) *
+                            180) /
+                          Math.PI;
                         return (
-                          <Box
-                            key={`${question.id}-marker`}
-                            sx={{
-                              position: "absolute",
-                              left: `${question.x}%`,
-                              top: `${question.y}%`,
-                              transform: "translate(-50%, -50%)",
-                              width: { xs: 26, sm: 34 },
-                              height: { xs: 26, sm: 34 },
-                              borderRadius: "50%",
-                              display: "grid",
-                              placeItems: "center",
-                              bgcolor: checked
-                                ? checked.isCorrect
-                                  ? "success.main"
-                                  : "warning.main"
-                                : "rgba(255,255,255,0.95)",
-                              color: checked ? "#fff" : "#0b2a55",
-                              border: `2px solid ${alpha(practiceMap.accent, 0.42)}`,
-                              boxShadow: "0 10px 18px rgba(15, 23, 42, 0.14)",
-                              fontWeight: 900,
-                              fontSize: { xs: "0.78rem", sm: "0.9rem" },
-                              zIndex: 2,
-                            }}
-                          >
-                            {index + 1}
+                          <Box key={`${question.id}-marker`}>
+                            {connectorLength > 1.2 ? (
+                              <Box
+                                sx={{
+                                  position: "absolute",
+                                  left: `${question.bubbleX}%`,
+                                  top: `${question.bubbleY}%`,
+                                  width: `${connectorLength}%`,
+                                  borderTop: `1.8px solid ${alpha(practiceMap.accent, 0.58)}`,
+                                  transform: `translateY(-50%) rotate(${connectorAngle}deg)`,
+                                  transformOrigin: "left center",
+                                  zIndex: 1,
+                                }}
+                              />
+                            ) : null}
+                            <Box
+                              sx={{
+                                position: "absolute",
+                                left: `${question.markerX}%`,
+                                top: `${question.markerY}%`,
+                                transform: "translate(-50%, -50%)",
+                                width: { xs: 10, sm: 12 },
+                                height: { xs: 10, sm: 12 },
+                                borderRadius: "50%",
+                                bgcolor: practiceMap.accent,
+                                border: "2px solid white",
+                                boxShadow: `0 8px 18px ${alpha(practiceMap.accent, 0.28)}`,
+                                zIndex: 2,
+                              }}
+                            />
+                            <Box
+                              sx={{
+                                position: "absolute",
+                                left: `${question.bubbleX}%`,
+                                top: `${question.bubbleY}%`,
+                                transform: "translate(-50%, -50%)",
+                                width: { xs: 34, sm: 38 },
+                                height: { xs: 34, sm: 38 },
+                                borderRadius: "50%",
+                                display: "grid",
+                                placeItems: "center",
+                                bgcolor: checked
+                                  ? checked.isCorrect
+                                    ? "success.main"
+                                    : "warning.main"
+                                  : "rgba(255,255,255,0.98)",
+                                color: checked ? "#fff" : "#0b2a55",
+                                border: `2px solid ${alpha(practiceMap.accent, 0.42)}`,
+                                boxShadow: "0 10px 18px rgba(15, 23, 42, 0.14)",
+                                fontWeight: 900,
+                                fontSize: { xs: "0.84rem", sm: "0.95rem" },
+                                zIndex: 3,
+                              }}
+                            >
+                              {index + 1}
+                            </Box>
                           </Box>
                         );
                       })}
 
                       {!isMobile ? (
-                        practiceQuestions.map((question, index) => {
+                        laidOutPracticeQuestions.map((question, index) => {
                           const checked = result?.checked.find((item) => item.id === question.id);
                           const borderColor = checked
                             ? checked.isCorrect
@@ -2240,10 +2473,11 @@ export default function MapsPanel() {
                               key={question.id}
                               sx={{
                                 position: "absolute",
-                                left: `${question.x}%`,
-                                top: `${question.y}%`,
-                                transform: "translate(-50%, -50%)",
+                                left: `${question.bubbleX}%`,
+                                top: `${Math.min(94, question.bubbleY + 8)}%`,
+                                transform: "translate(-50%, 0)",
                                 width: { xs: 118, sm: 152 },
+                                zIndex: 4,
                               }}
                             >
                               <TextField
@@ -2304,7 +2538,7 @@ export default function MapsPanel() {
                     <Typography variant="subtitle2" fontWeight={900} color="#0b2a55">
                       Answer the numbered places below
                     </Typography>
-                    {practiceQuestions.map((question, index) => {
+                    {laidOutPracticeQuestions.map((question, index) => {
                       const checked = result?.checked.find((item) => item.id === question.id);
                       const borderColor = checked
                         ? checked.isCorrect

@@ -31,6 +31,7 @@ import ParentDashboard from "./ParentDashboard";
 import TeacherDashboard from "./TeacherDashboard";
 import { getMyPaymentLogs } from "../payments/payments.api";
 import { useParentChild } from "../parents/ParentChildContext";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -127,6 +128,7 @@ export default function DashboardPage() {
 
         {/* Quick Actions / Content */}
         <Container sx={{ mt: 3 }}>
+          <ParentChildSwitcher label="Student" />
           {selectedChild?.name ? (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Viewing {selectedChild.name}
