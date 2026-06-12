@@ -8,10 +8,7 @@ export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     updateSW = registerSW({
       onNeedRefresh() {
-        // Show update available notification
-        if (window.confirm('New content available, reload?')) {
-          updateSW();
-        }
+        updateSW(true);
       },
       onOfflineReady() {
         console.log('App ready to work offline');
@@ -20,6 +17,7 @@ export function registerServiceWorker() {
       },
       onRegistered(registration) {
         console.log('SW Registered: ', registration);
+        registration?.update();
       },
       onRegisterError(error) {
         console.log('SW registration error', error);

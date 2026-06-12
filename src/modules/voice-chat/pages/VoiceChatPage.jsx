@@ -22,6 +22,10 @@ import ChatInput from "../../ai-chat/components/ChatInput";
 import { askAi, askAiVoice } from "../api/voiceChat.api";
 import { useAuth } from "../../../auth/AuthProvider";
 import { useVoiceChatHistory } from "../hooks/useVoiceChatHistory";
+import hiClip from "../../../assets/gif/hi.mp4";
+import listeningClip from "../../../assets/gif/listening.mp4";
+import teachingClip from "../../../assets/gif/teaching.mp4";
+import thinkingClip from "../../../assets/gif/thinking.mp4";
 
 const STATE_LABELS = {
   listening: "Listening...",
@@ -314,10 +318,10 @@ export default function VoiceChatPage() {
   const gifState = showIntro ? "hi" : robotState;
 
   const gifSrcMap = {
-    hi: encodeURI("/gif/HI.mp4"),
-    listening: encodeURI("/gif/Listining.mp4"),
-    thinking: encodeURI("/gif/Thinging (2).mp4"),
-    teaching: encodeURI("/gif/Teaching.mp4"),
+    hi: hiClip,
+    listening: listeningClip,
+    thinking: thinkingClip,
+    teaching: teachingClip,
   };
 
   return (

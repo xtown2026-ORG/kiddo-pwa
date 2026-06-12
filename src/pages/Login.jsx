@@ -13,6 +13,7 @@ import { AutoAwesomeRounded } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import LoginForm from "../modules/login/LoginForm";
 import { useEffect, useState } from "react";
+import appIcon from "../assets/app-icon-192.png";
 
 export default function Login() {
   const { user, loading, logout } = useAuth();
@@ -172,7 +173,7 @@ export default function Login() {
                   }}
                 >
                   <Avatar
-                    src="/android-chrome-192x192.png"
+                    src={appIcon}
                     alt="kiddoshadow logo"
                     variant="rounded"
                     sx={{ width: 40, height: 40 }}

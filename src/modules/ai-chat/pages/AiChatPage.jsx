@@ -6,6 +6,14 @@ import { useAiChat } from "../hooks/useAiChat";
 import ChatList from "../components/ChatList";
 import ChatInput from "../components/ChatInput";
 import { useAuth } from "../../../auth/AuthProvider";
+import deepListeningClip from "../../../assets/gif/deep-listening.mp4";
+import deepThinkingClip from "../../../assets/gif/deep-thinking.mp4";
+import friendlyHiClip from "../../../assets/gif/friendly-hi.mp4";
+import gentleHiClip from "../../../assets/gif/gentle-hi.mp4";
+import hiClip from "../../../assets/gif/hi.mp4";
+import listeningClip from "../../../assets/gif/listening.mp4";
+import teachingClip from "../../../assets/gif/teaching.mp4";
+import thinkingClip from "../../../assets/gif/thinking.mp4";
 
 const QUIZ_REDIRECT_THRESHOLD = 30;
 const CHAT_INPUT_DOCK_HEIGHT = 96;
@@ -114,14 +122,14 @@ function deriveQuizTopic(messages = []) {
 
 export default function AiChatPage() {
   const introClips = [
-    encodeURI("/gif/Gendle Hi.mp4"),
-    encodeURI("/gif/Friendly hi.mp4"),
-    encodeURI("/gif/HI.mp4"),
-    encodeURI("/gif/Listining.mp4"),
-    encodeURI("/gif/Teaching.mp4"),
-    encodeURI("/gif/Deep Thinging.mp4"),
-    encodeURI("/gif/Deep Listining.mp4"),
-    encodeURI("/gif/Thinging (2).mp4"),
+    gentleHiClip,
+    friendlyHiClip,
+    hiClip,
+    listeningClip,
+    teachingClip,
+    deepThinkingClip,
+    deepListeningClip,
+    thinkingClip,
   ];
   const { user } = useAuth();
   const theme = useTheme();
@@ -416,15 +424,23 @@ export default function AiChatPage() {
           }}
         >
           <Box
-            component="video"
-            autoPlay
-            loop
-            muted
-            playsInline
-            src={introClips[introClipIndex]}
-            onError={() => {
-              if (introClipIndex !== 2) setIntroClipIndex(2);
-            }}
+  component="video"
+  autoPlay
+  loop
+  muted
+  playsInline
+  preload="auto"
+  src={introClips[introClipIndex]}
+  onLoadedData={() => {
+    console.log("VIDEO LOADED:", introClips[introClipIndex]);
+  }}
+  onError={(e) => {
+    console.error("VIDEO ERROR:", introClips[introClipIndex], e);
+
+    if (introClipIndex !== 2) {
+      setIntroClipIndex(2);
+    }
+  }}
             sx={{
               width: "100%",
               height: "calc(100% - 80px)",

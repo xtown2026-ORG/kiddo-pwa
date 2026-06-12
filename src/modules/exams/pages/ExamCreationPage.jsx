@@ -110,13 +110,13 @@ export default function ExamCreationPage() {
                     onSubmit={handleSubmit}
                     sx={{ p: { xs: 2, md: 4 }, borderRadius: 3, width: "100%", boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
                 >
-                    <Grid container spacing={2}>
+                    <Grid container spacing={2} alignItems="stretch">
                         {error && (
                             <Grid item xs={12}>
                                 <Alert severity="error" variant="outlined">{error}</Alert>
                             </Grid>
                         )}
-                        <Grid item xs={12}>
+                        <Grid item xs={12} sm={6}>
                             <TextField
                                 required
                                 fullWidth
@@ -125,6 +125,7 @@ export default function ExamCreationPage() {
                                 placeholder="e.g., Mid-Term Mathematics"
                                 value={formData.name}
                                 onChange={handleChange}
+                                size="small"
                             />
                         </Grid>
 
@@ -135,6 +136,7 @@ export default function ExamCreationPage() {
                                 onChange={(val) =>
                                     setFormData((prev) => ({ ...prev, start_date: val }))
                                 }
+                                size="small"
                             />
                         </Grid>
 
@@ -146,10 +148,11 @@ export default function ExamCreationPage() {
                                     setFormData((prev) => ({ ...prev, end_date: val }))
                                 }
                                 minDate={formData.start_date || undefined}
+                                size="small"
                             />
                         </Grid>
 
-                        <Grid item xs={12}>
+                        <Grid item xs={12} sm={6}>
                             <TextField
                                 select
                                 required
@@ -159,6 +162,7 @@ export default function ExamCreationPage() {
                                 onChange={handleChange}
                                 disabled={assignmentsLoading}
                                 fullWidth
+                                size="small"
                                 slotProps={{
                                     select: {
                                         displayEmpty: true,
@@ -193,15 +197,20 @@ export default function ExamCreationPage() {
                             </TextField>
                         </Grid>
 
-                        <Grid item xs={12}>
+                        <Grid item xs={12} sm={6}>
                             <Button
                                 type="submit"
                                 variant="contained"
-                                fullWidth
                                 size="large"
                                 disabled={loading || !formData.class_id}
                                 startIcon={<Add />}
-                                sx={{ mt: 2 }}
+                                sx={{
+                                    mt: { xs: 2, sm: 0 },
+                                    height: 44,
+                                    borderRadius: 2,
+                                    px: 3,
+                                    width: { xs: "100%", sm: "auto" },
+                                }}
                             >
                                 {loading ? "Creating..." : "Schedule Exam"}
                             </Button>

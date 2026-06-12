@@ -43,10 +43,16 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: "autoUpdate",
+        injectRegister: "auto",
+        workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+        },
         includeAssets: [
           "favicon-16x16.png",
           "favicon-32x32.png",
-          "android-chrome-192x192.png",
+          "assets/app-icon-192.png",
           "safari-pinned-tab.svg",
           "maps/india outline.jpg",
           "maps/india outline empty.jpg",
@@ -64,18 +70,18 @@ export default defineConfig(({ mode }) => {
           start_url: "/login",
           icons: [
             {
-              src: "android-chrome-192x192.png",
+              src: "/assets/app-icon-192.png",
               sizes: "192x192",
               type: "image/png",
             },
             {
-              src: "android-chrome-512x512.png",
-              sizes: "512x512",
+              src: "/assets/app-icon-192.png",
+              sizes: "192x192",
               type: "image/png",
             },
             {
-              src: "android-chrome-512x512.png",
-              sizes: "512x512",
+              src: "/assets/app-icon-192.png",
+              sizes: "192x192",
               type: "image/png",
               purpose: "any maskable",
             },
