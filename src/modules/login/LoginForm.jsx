@@ -62,6 +62,7 @@ export default function LoginForm({ onSuccess }) {
               </InputAdornment>
             ),
           }}
+          inputProps={{ maxLength: 40 }}
           sx={(theme) => ({
             "& .MuiFilledInput-root": {
               borderRadius: 2,
@@ -122,6 +123,7 @@ export default function LoginForm({ onSuccess }) {
               </InputAdornment>
             ),
           }}
+          inputProps={{ maxLength: 32 }}
           sx={(theme) => ({
             "& .MuiFilledInput-root": {
               borderRadius: 2,

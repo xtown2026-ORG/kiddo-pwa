@@ -39,6 +39,6 @@ export function useDiary(filters = {}) {
     items,
     loading,
     error,
-    refresh: fetchDiary,
+    refresh: () => fetchDiary(filters),
   };
 }

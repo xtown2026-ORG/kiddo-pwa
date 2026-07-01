@@ -42,30 +42,27 @@ export default function ProfileForm({
   isCompleting = false,
 }) {
   const { children, selectedChild, setSelectedChildId } = useParentChild();
-  const initialRelationType =
-    isCompleting && profile?.role === "parent" && profile?.relation_type === "guardian"
-      ? "parent"
-      : profile?.relation_type || "parent";
+  const normalizedProfile = normalizeTitleCaseFields(profile, TITLE_CASE_FIELDS);
+  const initialRelationType = normalizedProfile?.relation_type || "mother";
 
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm({
     defaultValues: {
-      name: profile?.name || "",
-      phone: profile?.phone || "",
-      email: profile?.email || "",
+      name: normalizedProfile?.name || "",
+      phone: normalizedProfile?.phone || "",
+      email: normalizedProfile?.email || "",
       relation_type: initialRelationType,
-      dob: profile?.dob || "",
-      gender: profile?.gender || "",
-      blood_group: profile?.blood_group || "",
-      father_name: profile?.father_name || "",
-      mother_name: profile?.mother_name || "",
-      guardian_name: profile?.guardian_name || "",
-      father_occupation: profile?.father_occupation || "",
-      mother_occupation: profile?.mother_occupation || "",
-      family_income: profile?.family_income || "",
-      address: profile?.address || "",
-      designation: profile?.designation || "",
-      qualification: profile?.qualification || "",
-      experience: profile?.experience || "",
+      dob: normalizedProfile?.dob || "",
+      gender: normalizedProfile?.gender || "",
+      blood_group: normalizedProfile?.blood_group || "",
+      father_name: normalizedProfile?.father_name || "",
+      mother_name: normalizedProfile?.mother_name || "",
+      guardian_name: normalizedProfile?.guardian_name || "",
+      father_occupation: normalizedProfile?.father_occupation || "",
+      mother_occupation: normalizedProfile?.mother_occupation || "",
+      address: normalizedProfile?.address || "",
+      designation: normalizedProfile?.designation || "",
+      qualification: normalizedProfile?.qualification || "",
+      experience: normalizedProfile?.experience || "",
     },
   });
 
@@ -74,24 +71,24 @@ export default function ProfileForm({
   const [childMenuAnchor, setChildMenuAnchor] = useState(null);
 
   useEffect(() => {
+    const norm = normalizeTitleCaseFields(profile, TITLE_CASE_FIELDS);
     reset({
-      name: profile?.name || "",
-      phone: profile?.phone || "",
-      email: profile?.email || "",
-      relation_type: initialRelationType,
-      dob: profile?.dob || "",
-      gender: profile?.gender || "",
-      blood_group: profile?.blood_group || "",
-      father_name: profile?.father_name || "",
-      mother_name: profile?.mother_name || "",
-      guardian_name: profile?.guardian_name || "",
-      father_occupation: profile?.father_occupation || "",
-      mother_occupation: profile?.mother_occupation || "",
-      family_income: profile?.family_income || "",
-      address: profile?.address || "",
-      designation: profile?.designation || "",
-      qualification: profile?.qualification || "",
-      experience: profile?.experience || "",
+      name: norm?.name || "",
+      phone: norm?.phone || "",
+      email: norm?.email || "",
+      relation_type: norm?.relation_type || "mother",
+      dob: norm?.dob || "",
+      gender: norm?.gender || "",
+      blood_group: norm?.blood_group || "",
+      father_name: norm?.father_name || "",
+      mother_name: norm?.mother_name || "",
+      guardian_name: norm?.guardian_name || "",
+      father_occupation: norm?.father_occupation || "",
+      mother_occupation: norm?.mother_occupation || "",
+      address: norm?.address || "",
+      designation: norm?.designation || "",
+      qualification: norm?.qualification || "",
+      experience: norm?.experience || "",
     });
   }, [profile, reset]);
 
@@ -298,6 +295,7 @@ export default function ProfileForm({
         <TextField
           label="Name"
           fullWidth
+          inputProps={{ style: { textTransform: "capitalize" } }}
           error={Boolean(errors.name)}
           helperText={errors.name?.message}
           {...register("name", {
@@ -358,10 +356,11 @@ export default function ProfileForm({
               select
               defaultValue={initialRelationType}
               SelectProps={{ native: true }}
-              {...register("relation_type")}
+              inputProps={{ ...register("relation_type") }}
             >
+              <option value="mother">Mother</option>
+              <option value="father">Father</option>
               <option value="guardian">Guardian</option>
-              <option value="parent">Parent</option>
             </TextField>
             <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
               Linked Student
@@ -372,12 +371,14 @@ export default function ProfileForm({
                 fullWidth
                 value={profile?.student?.User?.name || profile?.student?.user?.name || profile?.student?.name || "—"}
                 InputProps={{ readOnly: true }}
+                disabled
               />
               <TextField
                 label="Admission No"
                 fullWidth
                 value={profile?.student?.admission_no || "—"}
                 InputProps={{ readOnly: true }}
+                disabled
               />
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
@@ -386,12 +387,14 @@ export default function ProfileForm({
                 fullWidth
                 value={profile?.class?.class_name || profile?.student?.Class?.class_name || profile?.student?.class?.class_name || "—"}
                 InputProps={{ readOnly: true }}
+                disabled
               />
               <TextField
                 label="Section"
                 fullWidth
                 value={profile?.section?.name || profile?.student?.Section?.name || profile?.student?.section?.name || "—"}
                 InputProps={{ readOnly: true }}
+                disabled
               />
             </Stack>
           </>
@@ -408,13 +411,11 @@ export default function ProfileForm({
                 label="Class"
                 fullWidth
                 value={profile?.class?.class_name || "—"}
-                InputProps={{ readOnly: true }}
               />
               <TextField
                 label="Section"
                 fullWidth
                 value={profile?.section?.name || "—"}
-                InputProps={{ readOnly: true }}
               />
             </Stack>
             <TextField
@@ -422,7 +423,6 @@ export default function ProfileForm({
               fullWidth
               type="email"
               {...register("email")}
-              sx={{ mb: 2 }}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
               <Controller
@@ -434,6 +434,7 @@ export default function ProfileForm({
                     value={field.value}
                     onChange={field.onChange}
                     disableFuture
+                    size="medium"
                   />
                 )}
               />
@@ -463,16 +464,15 @@ export default function ProfileForm({
               Family Details
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
-              <TextField label="Father's Name" fullWidth {...register("father_name")} />
-              <TextField label="Mother's Name" fullWidth {...register("mother_name")} />
+              <TextField label="Father's Name" fullWidth inputProps={{ style: { textTransform: "capitalize" } }} {...register("father_name")} />
+              <TextField label="Mother's Name" fullWidth inputProps={{ style: { textTransform: "capitalize" } }} {...register("mother_name")} />
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
-              <TextField label="Father's Occupation" fullWidth {...register("father_occupation")} />
-              <TextField label="Mother's Occupation" fullWidth {...register("mother_occupation")} />
+              <TextField label="Father's Occupation" fullWidth inputProps={{ style: { textTransform: "capitalize" } }} {...register("father_occupation")} />
+              <TextField label="Mother's Occupation" fullWidth inputProps={{ style: { textTransform: "capitalize" } }} {...register("mother_occupation")} />
             </Stack>
-            <TextField label="Guardian Name" fullWidth {...register("guardian_name")} />
-            <TextField label="Family Income" type="number" fullWidth {...register("family_income")} />
-
+            <TextField label="Guardian Name" fullWidth inputProps={{ style: { textTransform: "capitalize" } }} {...register("guardian_name")} />
+ 
             <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
               Address
             </Typography>
@@ -485,7 +485,7 @@ export default function ProfileForm({
             />
           </>
         )}
-
+ 
         {/* Teacher Fields */}
         {profile?.role === 'teacher' && (
           <>
@@ -511,6 +511,7 @@ export default function ProfileForm({
               <TextField
                 label="Designation"
                 fullWidth
+                inputProps={{ style: { textTransform: "capitalize" } }}
                 {...register("designation")}
               />
             </Stack>

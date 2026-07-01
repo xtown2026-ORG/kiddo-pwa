@@ -366,7 +366,7 @@ export default function DashboardPage() {
               {studentName[0]}
             </Avatar>
             <Typography variant="h6" fontWeight="bold">
-              Welcome back, {studentName.split(' ')[0]}
+              Welcome back, {studentName}
             </Typography>
           </Stack>
         </Stack>

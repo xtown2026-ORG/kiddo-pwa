@@ -11,18 +11,19 @@ import {
     Select,
     MenuItem,
     Stack,
-    Alert
+    Alert,
+    CircularProgress
 } from "@mui/material";
 import { useTeacherTimetable } from "../teacher-timetable/useTeacherTimetable";
 import { getMyTeacherAssignments } from "../teacher-timetable/teacherTimetable.api";
-import { createHomework } from "./diary.api";
-import DatePickerField from "../../components/DatePickerField";
+import { createHomework, updateHomework } from "./diary.api";
 
 export default function CreateHomeworkDialog({
     open,
     onClose,
     onSuccess,
     prefill,
+    editItem,
     lockClassSection = false,
 }) {
     const { timetable } = useTeacherTimetable();
@@ -31,17 +32,19 @@ export default function CreateHomeworkDialog({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const getTomorrowDate = () => {
+    const getTodayDate = () => {
         const d = new Date();
-        d.setDate(d.getDate() + 1);
         return d.toISOString().split("T")[0];
     };
 
     const [formData, setFormData] = useState({
-        class_section: "", // "classId,sectionId"
+        class_section: "", 
         subject_id: "",
         teacher_assignment_id: "",
-        homework_date: getTomorrowDate(),
+        homework_date: getTodayDate(),
+        title: "",
+        due_date: "",
+        attachment_url: "",
         description: "",
     });
 
@@ -49,25 +52,40 @@ export default function CreateHomeworkDialog({
         if (!open) return;
         setFormData((prev) => ({
             ...prev,
-            homework_date: getTomorrowDate(),
+            homework_date: getTodayDate(),
         }));
     }, [open]);
 
     useEffect(() => {
-        if (!open || !prefill) return;
-        const classId = prefill?.class_id ?? prefill?.classId;
-        const sectionId = prefill?.section_id ?? prefill?.sectionId;
-        setFormData((prev) => ({
-            ...prev,
-            class_section:
-                classId && sectionId ? `${classId},${sectionId}` : prev.class_section,
-            subject_id: prefill?.subject_id ?? prefill?.subjectId ?? prev.subject_id,
-            teacher_assignment_id:
-                prefill?.teacher_assignment_id ??
-                prefill?.teacherAssignmentId ??
-                prev.teacher_assignment_id,
-        }));
-    }, [open, prefill]);
+        if (!open) return;
+        if (editItem) {
+            setFormData({
+                class_section: `${editItem.class_id},${editItem.section_id}`,
+                subject_id: editItem.subject_id || "",
+                teacher_assignment_id: editItem.teacher_assignment_id || "",
+                homework_date: editItem.homework_date || getTodayDate(),
+                title: editItem.title || "",
+                due_date: editItem.due_date || "",
+                attachment_url: editItem.attachment_url || "",
+                description: editItem.description || "",
+            });
+            return;
+        }
+        if (prefill) {
+            const classId = prefill?.class_id ?? prefill?.classId;
+            const sectionId = prefill?.section_id ?? prefill?.sectionId;
+            setFormData((prev) => ({
+                ...prev,
+                class_section:
+                    classId && sectionId ? `${classId},${sectionId}` : prev.class_section,
+                subject_id: prefill?.subject_id ?? prefill?.subjectId ?? prev.subject_id,
+                teacher_assignment_id:
+                    prefill?.teacher_assignment_id ??
+                    prefill?.teacherAssignmentId ??
+                    prev.teacher_assignment_id,
+            }));
+        }
+    }, [open, prefill, editItem]);
 
     useEffect(() => {
         if (!open) return;
@@ -186,17 +204,16 @@ export default function CreateHomeworkDialog({
         setFormData({ ...formData, [name]: value });
     };
 
-    const minDueDate = getTomorrowDate();
-
     const handleSubmit = async () => {
         if (
             !formData.class_section ||
             !formData.subject_id ||
             !formData.teacher_assignment_id ||
-            !formData.description ||
-            !formData.homework_date
+            !formData.title ||
+            !formData.due_date ||
+            !formData.description
         ) {
-            setError("Please fill all fields");
+            setError("Please fill all mandatory fields (Title, Due Date, Subject, Description)");
             return;
         }
 
@@ -206,46 +223,69 @@ export default function CreateHomeworkDialog({
 
             const [classId, sectionId] = formData.class_section.split(",");
 
-            await createHomework({
+            const payload = {
                 class_id: parseInt(classId),
                 section_id: parseInt(sectionId),
                 subject_id: formData.subject_id ? Number(formData.subject_id) : undefined,
                 teacher_assignment_id: Number(formData.teacher_assignment_id),
-                homework_date: formData.homework_date,
+                homework_date: formData.homework_date || getTodayDate(),
+                title: formData.title,
+                due_date: formData.due_date,
+                attachment_url: formData.attachment_url || undefined,
                 description: formData.description,
-            });
+            };
+
+            if (editItem?.id) {
+                await updateHomework(editItem.id, payload);
+            } else {
+                await createHomework(payload);
+            }
 
             onSuccess();
             onClose();
         } catch (err) {
             console.error(err);
-            setError("Failed to create homework");
+            setError(editItem ? "Failed to update homework" : "Failed to create homework");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <DialogTitle>Assign Homework</DialogTitle>
-            <DialogContent>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                    {error && <Alert severity="error">{error}</Alert>}
+        <Dialog 
+            open={open} 
+            onClose={!loading ? onClose : undefined} 
+            fullWidth 
+            maxWidth="sm"
+            PaperProps={{
+                sx: { borderRadius: 3, boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }
+            }}
+        >
+            <DialogTitle sx={{ pb: 1, fontWeight: "bold" }}>
+                {editItem ? "Edit Homework" : "Assign Homework"}
+                <div style={{ fontSize: "0.8rem", fontWeight: "normal", color: "#666", marginTop: 4 }}>
+                    Assigned Today
+                </div>
+            </DialogTitle>
+            <DialogContent dividers>
+                <Stack spacing={3} sx={{ mt: 1 }}>
+                    {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
                     {!classOptions.length && !assignmentsLoading && (
-                        <Alert severity="info">
+                        <Alert severity="info" sx={{ borderRadius: 2 }}>
                             No assigned classes found. Ask the school admin to assign your
                             classes/subjects or create your timetable first.
                         </Alert>
                     )}
 
-                    <FormControl fullWidth>
+                    <FormControl fullWidth variant="outlined">
                         <InputLabel>Class & Section</InputLabel>
                         <Select
                             name="class_section"
                             label="Class & Section"
                             value={formData.class_section}
                             onChange={handleChange}
-                            disabled={!classOptions.length || lockClassSection}
+                            disabled={!classOptions.length || lockClassSection || loading}
+                            sx={{ borderRadius: 2 }}
                         >
                             {classOptions.map((opt) => (
                                 <MenuItem
@@ -258,13 +298,14 @@ export default function CreateHomeworkDialog({
                         </Select>
                     </FormControl>
 
-                    <FormControl fullWidth disabled={!formData.class_section}>
+                    <FormControl fullWidth variant="outlined" disabled={!formData.class_section || loading}>
                         <InputLabel>Subject</InputLabel>
                         <Select
                             name="subject_id"
                             label="Subject"
                             value={formData.teacher_assignment_id}
                             onChange={handleChange}
+                            sx={{ borderRadius: 2 }}
                         >
                             {subjectOptions.map((opt) => (
                                 <MenuItem key={opt.assignmentId} value={opt.assignmentId}>
@@ -274,33 +315,74 @@ export default function CreateHomeworkDialog({
                         </Select>
                     </FormControl>
 
-                    <DatePickerField
-                        label="Due Date"
-                        value={formData.homework_date}
-                        onChange={(val) =>
-                            setFormData((prev) => ({ ...prev, homework_date: val }))
-                        }
-                        minDate={minDueDate}
-                        disablePast
+                    <TextField
+                        name="title"
+                        label="Homework Title *"
+                        fullWidth
+                        value={formData.title}
+                        onChange={handleChange}
+                        disabled={loading}
+                        sx={{
+                            "& .MuiOutlinedInput-root": { borderRadius: 2 }
+                        }}
                     />
+
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        <TextField
+                            name="due_date"
+                            label="Due Date *"
+                            type="date"
+                            fullWidth
+                            value={formData.due_date}
+                            onChange={handleChange}
+                            disabled={loading}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                                "& .MuiOutlinedInput-root": { borderRadius: 2 }
+                            }}
+                        />
+                        <TextField
+                            name="attachment_url"
+                            label="Attachment URL (Optional)"
+                            placeholder="https://..."
+                            fullWidth
+                            value={formData.attachment_url}
+                            onChange={handleChange}
+                            disabled={loading}
+                            sx={{
+                                "& .MuiOutlinedInput-root": { borderRadius: 2 }
+                            }}
+                        />
+                    </Stack>
 
                     <TextField
                         name="description"
-                        label="Description"
+                        label="Homework Description *"
                         fullWidth
                         multiline
-                        rows={3}
+                        rows={4}
                         value={formData.description}
                         onChange={handleChange}
+                        disabled={loading}
+                        sx={{
+                            "& .MuiOutlinedInput-root": {
+                                borderRadius: 2
+                            }
+                        }}
                     />
                 </Stack>
             </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={loading}>
+            <DialogActions sx={{ p: 2.5, pt: 1.5 }}>
+                <Button onClick={onClose} disabled={loading} color="inherit" sx={{ borderRadius: 2, px: 3 }}>
                     Cancel
                 </Button>
-                <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-                    {loading ? "Assign" : "Assign"}
+                <Button 
+                    onClick={handleSubmit} 
+                    variant="contained" 
+                    disabled={loading || !formData.class_section || !formData.subject_id || !formData.description}
+                    sx={{ borderRadius: 2, px: 4, py: 1 }}
+                >
+                    {loading ? <CircularProgress size={24} color="inherit" /> : (editItem ? "Save Changes" : "Assign Homework")}
                 </Button>
             </DialogActions>
         </Dialog>

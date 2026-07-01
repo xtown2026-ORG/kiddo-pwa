@@ -63,7 +63,7 @@ export default function FirstLoginPage() {
 
   const [formData, setFormData] = useState({
     // Personal
-    name: user?.name || "",
+    name: toTitleCase(user?.name || ""),
     dob: "",
     gender: "",
     phone: "",

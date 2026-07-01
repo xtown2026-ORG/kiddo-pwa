@@ -19,6 +19,8 @@ import CreateHomeworkDialog from "./CreateHomeworkDialog";
 import DatePickerField from "../../components/DatePickerField";
 import { useParentChild } from "../parents/ParentChildContext";
 import ParentChildSwitcher from "../parents/ParentChildSwitcher";
+import DiaryList from "./DiaryList";
+import { deleteHomework } from "./diary.api";
 
 export default function DiaryPage() {
   const { user } = useAuth();
@@ -37,6 +39,23 @@ export default function DiaryPage() {
 
   const { items, loading, error, refresh } = useDiary(filters);
   const [showCreate, setShowCreate] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+
+  const handleEdit = (item) => {
+    setEditItem(item);
+    setShowCreate(true);
+  };
+
+  const handleDelete = async (item) => {
+    if (window.confirm("Are you sure you want to delete this homework?")) {
+      try {
+        await deleteHomework(item.id);
+        refresh();
+      } catch (err) {
+        alert("Failed to delete homework");
+      }
+    }
+  };
 
   const canCreate = user?.role === "teacher" || user?.role === "school_admin";
 
@@ -72,13 +91,8 @@ export default function DiaryPage() {
         <DatePickerField
           label="Given date"
           value={filterDate}
-          onChange={setFilterDate}
+          onChange={(newVal) => setFilterDate(newVal || today)}
         />
-        {filterDate && (
-          <Button variant="outlined" onClick={() => setFilterDate("")}>
-            Clear date filter
-          </Button>
-        )}
       </Stack>
 
       {!Array.isArray(items) || items.length === 0 ? (
@@ -105,65 +119,22 @@ export default function DiaryPage() {
           }, {})
         ).map(([dateKey, dayItems]) => (
           <Box key={dateKey} sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1 }}>
-              {dateKey === "unknown"
-                ? "No date"
-                : new Date(dateKey).toLocaleDateString()}
-            </Typography>
-            <Grid container spacing={2}>
-              {dayItems.map((item) => {
-                const subjectName =
-                  item.Subject?.name ||
-                  item.subject?.name ||
-                  item.subject ||
-                  "Subject";
-                const dueDate = item.homework_date || item.due_date || "";
-                const className =
-                  item.Class?.class_name ||
-                  item.class?.class_name ||
-                  item.class?.name ||
-                  "";
-                const sectionName =
-                  item.Section?.name ||
-                  item.section?.name ||
-                  "";
-
-                return (
-                  <Grid item xs={12} key={item.id}>
-                    <Card sx={{ borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                      <CardContent>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                          <Box>
-                            <Typography variant="subtitle2" color="primary" fontWeight="bold">
-                              {subjectName}
-                            </Typography>
-                            {(className || sectionName) && (
-                              <Typography variant="body2" color="text.secondary">
-                                {[className, sectionName].filter(Boolean).join(" ")}
-                              </Typography>
-                            )}
-                          </Box>
-                          {dueDate && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ whiteSpace: "nowrap", flexShrink: 0 }}
-                            >
-                              Due {new Date(dueDate).toLocaleDateString()}
-                            </Typography>
-                          )}
-                        </Stack>
-
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                          {item.description}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                );
-              })}
-            </Grid>
-          </Box>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1, color: "text.secondary" }}>
+                {dateKey === "unknown"
+                  ? "No date"
+                  : dateKey === today
+                    ? "Today's Homework"
+                    : new Date(dateKey).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </Typography>
+              <DiaryList 
+                items={dayItems} 
+                onEdit={handleEdit} 
+                onDelete={handleDelete} 
+                canEdit={canCreate} 
+                user={user}
+                studentId={user?.role === "student" ? user.student_id : selectedChild?.id}
+              />
+            </Box>
         ))
       )}
 
@@ -177,7 +148,11 @@ export default function DiaryPage() {
 
           <CreateHomeworkDialog
             open={showCreate}
-            onClose={() => setShowCreate(false)}
+            editItem={editItem}
+            onClose={() => {
+              setShowCreate(false);
+              setEditItem(null);
+            }}
             onSuccess={() => {
               if (refresh) refresh();
             }}

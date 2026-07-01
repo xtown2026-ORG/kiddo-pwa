@@ -18,8 +18,9 @@ import { useTeacherAssignments } from "./useTeacherAssignments";
 
 export default function TeacherTimetablePage() {
   const { timetable, loading, error, refresh } = useTeacherTimetable();
-  const { classTeacherSections, loading: assignmentsLoading } = useTeacherAssignments();
+  const { classTeacherSections, assignments, loading: assignmentsLoading } = useTeacherAssignments();
   const [showManage, setShowManage] = useState(false);
+  const [manageDay, setManageDay] = useState("monday");
 
   const canManage = (classTeacherSections?.length || 0) > 0;
 
@@ -39,54 +40,34 @@ export default function TeacherTimetablePage() {
     );
   }
 
-  const hasPeriods = timetable && !Array.isArray(timetable)
-    ? Object.values(timetable).some((day) => Array.isArray(day) && day.length > 0)
-    : Array.isArray(timetable) && timetable.length > 0;
+  const handleManageDay = (day) => {
+    setManageDay(day);
+    setShowManage(true);
+  };
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 4, pb: 10 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        My Timetable
+    <Container maxWidth="md" sx={{ mt: 4, pb: 10 }}>
+      <Typography variant="h5" fontWeight="bold" sx={{ mb: 4, color: "primary.main" }}>
+        My Weekly Timetable
       </Typography>
 
-      {hasPeriods ? (
-        <TeacherTimetableView timetable={timetable} />
-      ) : (
-        <Typography color="text.secondary">
-          No timetable available yet.
-        </Typography>
-      )}
+      <TeacherTimetableView 
+        timetable={timetable} 
+        onManageDay={handleManageDay}
+        canManage={canManage && !assignmentsLoading}
+      />
 
-      {canManage && (
-        <Card sx={{ mt: 3 }}>
-          <CardContent>
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Box>
-                <Typography fontWeight={600}>Manage Section Timetable</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  You are a class teacher and can update your section timetable.
-                </Typography>
-              </Box>
-              <Button
-                variant="contained"
-                startIcon={<Edit />}
-                onClick={() => setShowManage(true)}
-                disabled={assignmentsLoading}
-              >
-                Manage
-              </Button>
-            </Stack>
-          </CardContent>
-        </Card>
-      )}
-
-      <ManageTimetableDialog
-        open={showManage}
+      <ManageTimetableDialog 
+        open={showManage} 
         onClose={() => setShowManage(false)}
         onSuccess={() => {
-          refresh?.();
+          setShowManage(false);
+          refresh();
         }}
         classTeacherSections={classTeacherSections}
+        teacherAssignments={assignments}
+        teacherTimetable={timetable}
+        defaultDay={manageDay}
       />
     </Container>
   );

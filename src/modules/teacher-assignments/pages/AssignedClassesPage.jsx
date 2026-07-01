@@ -1,34 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Container,
   Typography,
   Card,
   CardContent,
   Stack,
+  Box,
   Chip,
   CircularProgress,
   Alert,
-  Box,
-  Divider,
 } from "@mui/material";
-import { School, Book, Star } from "@mui/icons-material";
 import { getMyTeacherAssignments } from "../../teacher-timetable/teacherTimetable.api";
+import { useAuth } from "../../../auth/AuthProvider";
 
 export default function AssignedClassesPage() {
-  const [items, setItems] = useState([]);
+  const { user } = useAuth();
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (user?.role !== "teacher") return;
       try {
         setLoading(true);
         const res = await getMyTeacherAssignments();
-        const data = res?.data?.data ?? res?.data?.items ?? [];
-        if (!cancelled) setItems(Array.isArray(data) ? data : []);
+        const data = res.data?.data || res.data || [];
+        if (!cancelled) setClasses(Array.isArray(data) ? data : []);
       } catch (e) {
-        if (!cancelled) setError("Failed to load assignments");
+        console.error("Failed to load assigned classes", e);
+        if (!cancelled) setError("Failed to load assigned classes");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -37,29 +39,7 @@ export default function AssignedClassesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const grouped = useMemo(() => {
-    const map = new Map();
-    items.forEach((a) => {
-      const className = a.Class?.class_name || a.class?.class_name || a.class_id;
-      const sectionName = a.Section?.name || a.section?.name || a.section_id;
-      const key = `${className}-${sectionName}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          className,
-          sectionName,
-          isClassTeacher: false,
-          subjects: new Map(),
-        });
-      }
-      const entry = map.get(key);
-      if (a.is_class_teacher) entry.isClassTeacher = true;
-      const subjectName = a.Subject?.name || a.subject?.name || "Subject";
-      entry.subjects.set(a.subject_id || subjectName, subjectName);
-    });
-    return Array.from(map.values());
-  }, [items]);
+  }, [user?.role]);
 
   if (loading) {
     return (
@@ -77,59 +57,78 @@ export default function AssignedClassesPage() {
     );
   }
 
+  // Group by class and section
+  const map = new Map();
+  classes.forEach(c => {
+    const key = `${c.class_id}-${c.section_id}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        className: c.class?.class_name || "Class",
+        sectionName: c.section?.name || c.section_id,
+        isClassTeacher: c.is_class_teacher,
+        subjects: new Set([c.subject?.name].filter(Boolean))
+      });
+    } else {
+      const existing = map.get(key);
+      if (c.subject?.name) existing.subjects.add(c.subject.name);
+      if (c.is_class_teacher) existing.isClassTeacher = true;
+    }
+  });
+
+  const displayClasses = Array.from(map.values());
+
   return (
     <Container maxWidth="sm" sx={{ mt: 3, pb: 10 }}>
       <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>
-        Assigned Classes
+        My Assigned Classes
       </Typography>
 
-      {grouped.length === 0 ? (
-        <Alert severity="info">
-          No assignments found. Ask the school admin to assign your classes and
-          subjects.
-        </Alert>
-      ) : (
-        <Stack spacing={2}>
-          {grouped.map((g) => (
-            <Card key={`${g.className}-${g.sectionName}`} sx={{ borderRadius: 3 }}>
-              <CardContent>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <School color="primary" />
-                  <Typography variant="h6" fontWeight="bold">
-                    Class {g.className} - {g.sectionName}
-                  </Typography>
-                </Stack>
-
-                {g.isClassTeacher && (
-                  <Box sx={{ mt: 1 }}>
-                    <Chip
-                      icon={<Star />}
-                      label="Class Teacher"
-                      color="success"
-                      size="small"
-                    />
-                  </Box>
-                )}
-
-                <Divider sx={{ my: 1.5 }} />
-
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {Array.from(g.subjects.values()).map((subject) => (
-                    <Chip
-                      key={subject}
-                      icon={<Book />}
-                      label={subject}
-                      variant="outlined"
-                      size="small"
-                      sx={{ mr: 1, mb: 1 }}
-                    />
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
-      )}
+      <Stack spacing={2}>
+        {displayClasses.length === 0 ? (
+          <Alert severity="info">
+            No classes assigned.
+          </Alert>
+        ) : (
+          displayClasses.map((c) => (
+            <Box
+              key={c.id}
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                justifyContent: 'space-between',
+                gap: 2,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+              }}
+            >
+              <Box>
+                <Typography variant="h6" fontWeight={600} color="primary.main">
+                  {c.className} - {c.sectionName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Subjects: {c.subjects.size > 0 ? Array.from(c.subjects).join(', ') : "N/A"}
+                </Typography>
+              </Box>
+              
+              {c.isClassTeacher && (
+                <Chip
+                  label="Class Teacher"
+                  color="success"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontWeight: 500 }}
+                />
+              )}
+            </Box>
+          ))
+        )}
+      </Stack>
     </Container>
   );
 }

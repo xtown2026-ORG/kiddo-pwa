@@ -3,7 +3,13 @@ import api from "./axios";
 // Enhanced login API with better error handling
 export async function loginApi(credentials) {
   try {
-    const res = await api.post("/auth/login", credentials);
+    const identifier = credentials?.username?.trim();
+    const payload = {
+      username: identifier,
+      password: credentials?.password,
+    };
+
+    const res = await api.post("/auth/login", payload);
     
     if (!res.data || !res.data.token) {
       throw new Error("Invalid response from server: missing token");
@@ -21,7 +27,7 @@ export async function loginApi(credentials) {
         case 401:
           throw new Error("Invalid username or password");
         case 403:
-          throw new Error("Account is disabled or school is inactive");
+          throw new Error(message || "Account is disabled or school is inactive");
         case 429:
           throw new Error("Too many login attempts. Please try again later");
         case 500:
@@ -209,7 +215,7 @@ export function validateToken(token) {
 
 // Check if user needs profile completion
 export function needsProfileCompletion(user) {
-  return user && user.first_login === true;
+  return user && user.role !== "parent" && user.first_login === true;
 }
 
 // Get profile completion endpoint based on user role

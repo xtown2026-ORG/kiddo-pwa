@@ -6,7 +6,7 @@ import { getMyProfile } from "../modules/profile/profile.api";
 const APPROVAL_ROLES = ["teacher", "student", "parent"];
 
 export default function RequireApproval({ children }) {
-  const { user, loading, updateUser } = useAuth();
+  const { user, loading, updateUser, token } = useAuth();
   const location = useLocation();
   const [profileGate, setProfileGate] = useState({
     firstLogin: null,
@@ -18,7 +18,7 @@ export default function RequireApproval({ children }) {
     return user?.role && APPROVAL_ROLES.includes(user.role);
   }, [user?.role]);
 
-  const completionPath = user?.role === "parent" ? "/parent/profile" : "/first-login";
+  const completionPath = "/first-login";
   const isOnCompletionPath =
     location.pathname === completionPath ||
     location.pathname.startsWith(`${completionPath}/`);
@@ -37,7 +37,9 @@ export default function RequireApproval({ children }) {
         setChecking(true);
         const res = await getMyProfile(user.role);
         const data = res?.data || {};
-        const approvalStatus = data?.approval_status || null;
+        // Normalize: approval_status may be at top level OR inside data.user (parent profile shape)
+        const normalized = data?.user ? { ...data, ...data.user } : data;
+        const approvalStatus = normalized?.approval_status || null;
         const firstLogin =
           typeof data?.first_login === "boolean"
             ? data.first_login
@@ -46,7 +48,6 @@ export default function RequireApproval({ children }) {
               : null;
 
         if (isMounted) {
-          const normalized = data?.user ? { ...data, ...data.user } : data;
           setProfileGate({
             firstLogin,
             approvalStatus,
@@ -77,12 +78,12 @@ export default function RequireApproval({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [shouldCheck, user?.role]);
+  }, [shouldCheck, user?.role, token]);
 
   if (loading || checking) return null;
   if (!shouldCheck) return children;
 
-  if (profileGate.firstLogin === true && !isOnCompletionPath) {
+  if (user?.role !== "parent" && profileGate.firstLogin === true && !isOnCompletionPath) {
     return (
       <Navigate to={completionPath} state={{ from: location }} replace />
     );
@@ -92,7 +93,8 @@ export default function RequireApproval({ children }) {
     return children;
   }
 
-  if (profileGate.approvalStatus !== "approved") {
+  // Only redirect if we have a confirmed non-approved status (not null/undefined which means unknown)
+  if (profileGate.approvalStatus !== null && profileGate.approvalStatus !== "approved") {
     const isApprovalRoute = location.pathname.startsWith("/approval-pending");
 
     if (!isApprovalRoute) {
