@@ -4,7 +4,7 @@ import {
   acknowledgeNotification,
 } from "./notifications.api";
 
-export function useNotifications() {
+export function useNotifications(params = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -18,7 +18,7 @@ export function useNotifications() {
     const handler = () => fetchNotifications();
     window.addEventListener("notifications:refresh", handler);
     return () => window.removeEventListener("notifications:refresh", handler);
-  }, [isStudentRoute]);
+  }, [isStudentRoute, JSON.stringify(params)]);
 
   async function fetchNotifications() {
     const isStudentDemoRoute = isStudentRoute;
@@ -42,7 +42,7 @@ export function useNotifications() {
 
     try {
       setLoading(true);
-      const res = await getNotifications();
+      const res = await getNotifications(params);
       setItems(res.data.data || res.data.items || res.data);
       setError(null);
     } catch (err) {
@@ -94,4 +94,3 @@ export function useNotifications() {
     refresh: fetchNotifications,
   };
 }
-

@@ -11,6 +11,9 @@ function getAuthConfig() {
   return {
     headers: {
       Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+      Expires: "0",
     },
   };
 }
@@ -20,9 +23,14 @@ const getTeacherProfile = async () => {
 };
 
 export const getMyProfile = (role) => {
-  if (role === "student") return api.get("/students/me", getAuthConfig());
-  if (role === "teacher") return getTeacherProfile();
-  if (role === "parent") return api.get("/parents/parents/profile", getAuthConfig());
+  const config = {
+    ...getAuthConfig(),
+    params: { _ts: Date.now() },
+  };
+
+  if (role === "student") return api.get("/students/me", config);
+  if (role === "teacher") return api.get("/teachers/me", config);
+  if (role === "parent") return api.get("/parents/parents/profile", config);
 
   throw new Error("Unsupported role");
 };

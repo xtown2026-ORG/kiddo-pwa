@@ -26,8 +26,8 @@ export default function TeacherDashboard() {
         )
       ).size;
 
-      const timetable = dashboard?.timetable || {};
-      const periodsToday = Object.values(timetable).flat().length;
+      const timetableArray = Array.isArray(dashboard?.timetable) ? dashboard.timetable : [];
+      const periodsToday = timetableArray.filter(t => !t.is_break).length;
       const classCountFromDashboard = dashboard?.classes?.length ?? 0;
 
       setData({
@@ -36,7 +36,7 @@ export default function TeacherDashboard() {
         pendingReportCards: dashboard?.pending_report_cards ?? 0,
         classes: classCountFromDashboard || uniqueAssignedClasses,
         aiTokens: dashboard?.ai_tokens ?? { remaining: 0, used: 0, total: 0 },
-        assignedTests: dashboard?.assigned_tests ?? { total: 0, pending: 0 },
+        assignedTests: dashboard?.assigned_tests ?? { total: 0, attempted: 0, pending: 0 },
       });
     } catch {
       setData({
@@ -45,7 +45,7 @@ export default function TeacherDashboard() {
         pendingReportCards: 0,
         classes: 0,
         aiTokens: { remaining: 0, used: 0, total: 0 },
-        assignedTests: { total: 0, pending: 0 },
+        assignedTests: { total: 0, attempted: 0, pending: 0 },
       });
     }
   }
@@ -60,11 +60,11 @@ export default function TeacherDashboard() {
       <KpiCard title="Report Cards" value={data.pendingReportCards} />
       <KpiCard
         title="AI Tokens"
-        value={`${data.aiTokens.remaining}/${data.aiTokens.total}`}
+        value={`${data.aiTokens.used}/${data.aiTokens.total}`}
       />
       <KpiCard
         title="Assigned Tests"
-        value={`${data.assignedTests.total}/${data.assignedTests.pending}`}
+        value={`${data.assignedTests.attempted}/${data.assignedTests.total}`}
       />
       <Grid item xs={12}>
         <TeacherUpcomingClasses />
@@ -75,10 +75,10 @@ export default function TeacherDashboard() {
 
 function KpiCard({ title, value }) {
   return (
-    <Grid item xs={6} sm={4} md={2.4}>
+    <Grid item xs={6} sm={4} md={2}>
       <Card sx={{ borderRadius: 3, height: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {title}
           </Typography>
           <Typography variant="h5" fontWeight="bold" color="primary">

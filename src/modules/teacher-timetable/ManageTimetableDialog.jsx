@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import dayjs from "dayjs";
 import {
     Dialog,
     DialogTitle,
@@ -16,79 +17,136 @@ import {
     Typography,
     Box,
     Divider,
-    FormControlLabel,
-    Checkbox
 } from "@mui/material";
-import { Add, Delete } from "@mui/icons-material";
-import { getSectionAssignments, saveTimetable } from "./teacherTimetable.api";
+import { Add, Delete, ArrowBack } from "@mui/icons-material";
+import { getSectionAssignments, saveTimetable, getSectionTimetable } from "./teacherTimetable.api";
 
-export default function ManageTimetableDialog({ open, onClose, onSuccess, classTeacherSections = [] }) {
+export default function ManageTimetableDialog({ open, onClose, onSuccess, classTeacherSections = [], teacherAssignments = [], teacherTimetable = {}, defaultDay = "monday" }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     const [classSection, setClassSection] = useState("");
-    const [dayOfWeek, setDayOfWeek] = useState("monday");
+    const [dayOfWeek, setDayOfWeek] = useState(defaultDay);
     const [sectionAssignments, setSectionAssignments] = useState([]);
 
     // Entries state
     const [entries, setEntries] = useState([
         { start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false }
     ]);
+    const [hiddenEntries, setHiddenEntries] = useState([]);
 
     const classOptions = useMemo(() => {
-        return classTeacherSections.map((a) => ({
-            class_id: a.class_id,
-            section_id: a.section_id,
-            label: `${a.Class?.class_name || a.class?.class_name || a.class_id} - ${a.Section?.name || a.section?.name || a.section_id}`,
+        return classTeacherSections.map((s) => ({
+            value: `${s.class_id},${s.section_id}`,
+            label: `${s.Class?.class_name || s.class?.class_name || "Class"} - ${s.Section?.name || s.section?.name || "Section"}`,
         }));
     }, [classTeacherSections]);
 
     useEffect(() => {
-        if (!open) return;
-        if (!classSection && classOptions.length === 1) {
-            const only = classOptions[0];
-            setClassSection(`${only.class_id},${only.section_id}`);
+        if (open && classOptions.length > 0 && !classSection) {
+            setClassSection(classOptions[0].value);
+            setDayOfWeek(defaultDay);
+        } else if (!open) {
+            setClassSection("");
+            setSectionAssignments([]);
+            setEntries([{ start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false }]);
+            setHiddenEntries([]);
         }
-    }, [open, classOptions, classSection]);
+    }, [open, classOptions, classSection, defaultDay]);
 
     useEffect(() => {
-        async function loadAssignments() {
+        async function loadAssignmentsAndTimetable() {
             if (!classSection) {
                 setSectionAssignments([]);
                 return;
             }
 
-            const [, sectionId] = classSection.split(",");
+            const [classId, sectionId] = classSection.split(",");
             try {
                 const res = await getSectionAssignments(sectionId);
                 const data = res?.data?.data ?? res?.data ?? [];
-                setSectionAssignments(Array.isArray(data) ? data : []);
+                const dataArray = Array.isArray(data) ? data : [];
+
+                // Load existing timetable for this section
+                if (open) {
+                    const ttRes = await getSectionTimetable(classId, sectionId);
+                    const ttData = ttRes?.data?.data ?? ttRes?.data ?? {};
+                    const dayEntries = ttData[dayOfWeek] || [];
+
+                    const myAssignmentIds = teacherAssignments.map(a => String(a.id));
+
+                    // Filter dropdown to only show the logged-in teacher's assignments
+                    const filteredData = dataArray.filter(a => myAssignmentIds.includes(String(a.id)));
+                    setSectionAssignments(filteredData);
+
+                    if (dayEntries.length > 0) {
+                        const loadedEntries = dayEntries.map(e => ({
+                            start_time: e.start_time?.slice(0, 5) || "",
+                            end_time: e.end_time?.slice(0, 5) || "",
+                            teacher_assignment_id: e.teacher_assignment_id || "",
+                            title: e.title || "",
+                            is_break: e.is_break || false
+                        }));
+
+                        const currentDay = dayjs().format("dddd").toLowerCase();
+                        const currentTime = dayjs().format("HH:mm");
+                        const isToday = dayOfWeek === currentDay;
+
+                        const visible = [];
+                        const hidden = [];
+
+                        loadedEntries.forEach(e => {
+                            if (e.is_break) {
+                                hidden.push(e);
+                            } else if (isToday && e.end_time < currentTime) {
+                                hidden.push(e);
+                            } else if (e.teacher_assignment_id && !myAssignmentIds.includes(String(e.teacher_assignment_id))) {
+                                hidden.push(e);
+                            } else {
+                                visible.push(e);
+                            }
+                        });
+
+                        if (visible.length === 0) {
+                            visible.push({ start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false });
+                        }
+
+                        setEntries(visible);
+                        setHiddenEntries(hidden);
+                    } else {
+                        setEntries([{ start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false }]);
+                        setHiddenEntries([]);
+                    }
+                }
             } catch (err) {
                 console.error(err);
                 setSectionAssignments([]);
             }
         }
-        loadAssignments();
-    }, [classSection, open]);
+        loadAssignmentsAndTimetable();
+    }, [classSection, dayOfWeek, open]);
 
+    const handleAddEntry = () => {
+        setEntries([
+            ...entries,
+            { start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false }
+        ]);
+    };
 
-    const handleEntryChange = (index, field, value) => {
-        const newEntries = [...entries];
-        newEntries[index] = { ...newEntries[index], [field]: value };
+    const handleRemoveEntry = (index) => {
+        const newEntries = entries.filter((_, i) => i !== index);
         setEntries(newEntries);
     };
 
-    const addEntry = () => {
-        setEntries([...entries, { start_time: "", end_time: "", teacher_assignment_id: "", title: "", is_break: false }]);
-    };
-
-    const removeEntry = (index) => {
-        setEntries(entries.filter((_, i) => i !== index));
+    const handleEntryChange = (index, field, value) => {
+        const newEntries = [...entries];
+        newEntries[index][field] = value;
+        setEntries(newEntries);
     };
 
     const handleSubmit = async () => {
         if (!classSection) {
-            setError("Please select a class");
+            setError("Please select a class & section");
             return;
         }
 
@@ -98,176 +156,221 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
             return;
         }
 
+        const [classId, sectionId] = classSection.split(",");
+        const currentSchoolId = classTeacherSections[0]?.school_id || 1; 
+
+        // Combine hidden (breaks, past periods) with visible
+        const payload = {
+            school_id: currentSchoolId,
+            class_id: parseInt(classId),
+            section_id: parseInt(sectionId),
+            day_of_week: dayOfWeek,
+            entries: [...entries, ...hiddenEntries].map(e => {
+                const entryData = {
+                    start_time: e.start_time,
+                    end_time: e.end_time,
+                    is_break: e.is_break,
+                };
+                if (e.title) entryData.title = e.title;
+                if (!e.is_break && e.teacher_assignment_id) {
+                    entryData.teacher_assignment_id = parseInt(e.teacher_assignment_id);
+                }
+                return entryData;
+            })
+        };
+
         try {
             setLoading(true);
             setError(null);
-
-            const [classId, sectionId] = classSection.split(",");
-
-            // Clean up entries
-            const validEntries = entries.map(e => ({
-                start_time: e.start_time,
-                end_time: e.end_time,
-                teacher_assignment_id: e.is_break ? undefined : parseInt(e.teacher_assignment_id),
-                title: e.title,
-                is_break: e.is_break
-            }));
-
-            await saveTimetable({
-                class_id: parseInt(classId),
-                section_id: parseInt(sectionId),
-                day_of_week: dayOfWeek,
-                entries: validEntries
-            });
-
-            onSuccess();
+            await saveTimetable(payload);
+            if (onSuccess) onSuccess();
             onClose();
         } catch (err) {
             console.error(err);
-            setError("Failed to save timetable");
+            setError(err.response?.data?.message || "Failed to save timetable");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-            <DialogTitle>Manage Class Timetable</DialogTitle>
-            <DialogContent>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                    {error && <Alert severity="error">{error}</Alert>}
-                    {!classOptions.length && (
-                        <Alert severity="info">
-                            You are not assigned as a class teacher for any section.
-                        </Alert>
-                    )}
-
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <FormControl fullWidth disabled={!classOptions.length}>
-                            <InputLabel>Class & Section</InputLabel>
-                            <Select
-                                value={classSection}
-                                label="Class & Section"
-                                onChange={(e) => setClassSection(e.target.value)}
-                            >
-                                {classOptions.map((opt) => (
-                                    <MenuItem
-                                        key={`${opt.class_id},${opt.section_id}`}
-                                        value={`${opt.class_id},${opt.section_id}`}
-                                    >
-                                        {opt.label}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-
-                        <FormControl fullWidth>
-                            <InputLabel>Day</InputLabel>
-                            <Select
-                                value={dayOfWeek}
-                                label="Day"
-                                onChange={(e) => setDayOfWeek(e.target.value)}
-                            >
-                                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map(day => (
-                                    <MenuItem key={day} value={day}>
-                                        {day.charAt(0).toUpperCase() + day.slice(1)}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Stack>
-
-                    <Divider>Periods</Divider>
-
-    {entries.map((entry, index) => (
-        <Stack key={index} spacing={1}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                    <TextField
-                        type="time"
-                        label="Start"
-                        value={entry.start_time}
-                        onChange={(e) => handleEntryChange(index, "start_time", e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                        sx={{ width: 110 }}
-                    />
-                    <TextField
-                        type="time"
-                        label="End"
-                        value={entry.end_time}
-                        onChange={(e) => handleEntryChange(index, "end_time", e.target.value)}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                        sx={{ width: 110 }}
-                    />
-                </Box>
-
-                <FormControl fullWidth size="small" disabled={entry.is_break} sx={{ minWidth: 220 }}>
-                    <InputLabel>Teacher Assignment</InputLabel>
-                    <Select
-                        value={entry.teacher_assignment_id}
-                        label="Teacher Assignment"
-                        onChange={(e) => handleEntryChange(index, "teacher_assignment_id", e.target.value)}
-                    >
-                        <MenuItem value=""><em>Select assignment</em></MenuItem>
-                        {sectionAssignments.map((a) => {
-                            const subjectName = a.Subject?.name || a.subject?.name || "Subject";
-                            const teacherName =
-                                a.Teacher?.User?.name ||
-                                a.teacher?.user?.name ||
-                                a.teacher?.User?.name ||
-                                "Teacher";
-                            return (
-                                <MenuItem key={a.id} value={a.id}>
-                                    {subjectName} - {teacherName}
-                                </MenuItem>
-                            );
-                        })}
-                    </Select>
-                </FormControl>
-            </Stack>
-
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                <FormControlLabel
-                    control={
-                        <Checkbox
-                            checked={entry.is_break}
-                            onChange={(e) => handleEntryChange(index, "is_break", e.target.checked)}
-                        />
-                    }
-                    label="Break"
-                />
-
-                {entry.is_break && (
-                    <TextField
-                        label="Break label (optional)"
-                        value={entry.title}
-                        onChange={(e) => handleEntryChange(index, "title", e.target.value)}
-                        size="small"
-                        sx={{ minWidth: 220, flex: 1 }}
-                    />
-                )}
-
-                <IconButton onClick={() => removeEntry(index)} color="error">
-                    <Delete />
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                <IconButton onClick={onClose} edge="start" sx={{ mr: 1 }}>
+                    <ArrowBack />
                 </IconButton>
-            </Stack>
-        </Stack>
-    ))}
+                Manage Class Timetable
+            </DialogTitle>
+            <DialogContent dividers>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                
+                <Stack direction="row" spacing={2} sx={{ mb: 4, mt: 1 }}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Class & Section</InputLabel>
+                        <Select
+                            value={classSection}
+                            onChange={(e) => setClassSection(e.target.value)}
+                            label="Class & Section"
+                        >
+                            {classOptions.map(opt => (
+                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
 
-                    <Button startIcon={<Add />} onClick={addEntry}>
-                        Add Period
-                    </Button>
-
+                    <FormControl fullWidth size="small">
+                        <InputLabel>Day</InputLabel>
+                        <Select
+                            value={dayOfWeek}
+                            onChange={(e) => setDayOfWeek(e.target.value)}
+                            label="Day"
+                        >
+                            <MenuItem value="monday">Monday</MenuItem>
+                            <MenuItem value="tuesday">Tuesday</MenuItem>
+                            <MenuItem value="wednesday">Wednesday</MenuItem>
+                            <MenuItem value="thursday">Thursday</MenuItem>
+                            <MenuItem value="friday">Friday</MenuItem>
+                            <MenuItem value="saturday">Saturday</MenuItem>
+                        </Select>
+                    </FormControl>
                 </Stack>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={loading}>
-                    Cancel
+
+                <Divider sx={{ mb: 3 }}>Periods</Divider>
+
+                {entries.map((entry, index) => (
+                    <Box 
+                        key={index} 
+                        sx={{ 
+                            p: 2.5, 
+                            border: '1px solid', 
+                            borderColor: 'divider', 
+                            borderRadius: 3, 
+                            mb: 2,
+                            position: 'relative',
+                            bgcolor: 'background.paper',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+                        }}
+                    >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" sx={{ 
+                                bgcolor: 'primary.main', 
+                                color: 'white', 
+                                px: 1.5, 
+                                py: 0.5, 
+                                borderRadius: 10,
+                                fontSize: '0.75rem',
+                                fontWeight: 600
+                            }}>
+                                Period {index + 1}
+                            </Typography>
+                            {entries.length > 1 && (
+                                <IconButton 
+                                    size="small" 
+                                    color="error" 
+                                    onClick={() => handleRemoveEntry(index)}
+                                    sx={{ bgcolor: 'error.lighter', '&:hover': { bgcolor: 'error.light', color: 'white' } }}
+                                >
+                                    <Delete fontSize="small" />
+                                </IconButton>
+                            )}
+                        </Stack>
+                        
+                        <Stack spacing={2.5}>
+                            <Stack direction="row" spacing={2}>
+                                <TextField
+                                    label="Start Time"
+                                    type="time"
+                                    size="small"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    value={entry.start_time}
+                                    onChange={(e) => handleEntryChange(index, "start_time", e.target.value)}
+                                />
+                                <TextField
+                                    label="End Time"
+                                    type="time"
+                                    size="small"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    value={entry.end_time}
+                                    onChange={(e) => handleEntryChange(index, "end_time", e.target.value)}
+                                />
+                            </Stack>
+
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Subject & Teacher Assignment</InputLabel>
+                                <Select
+                                    value={entry.teacher_assignment_id || ""}
+                                    onChange={(e) => handleEntryChange(index, "teacher_assignment_id", e.target.value)}
+                                    label="Subject & Teacher Assignment"
+                                >
+                                    <MenuItem value="">
+                                        <em>Select assignment</em>
+                                    </MenuItem>
+                                    {sectionAssignments.map((a) => {
+                                        // Availability check based on logged-in teacher's timetable
+                                        const isMyAssignment = teacherAssignments.some(ta => String(ta.id) === String(a.id));
+                                        let isBusy = false;
+                                        
+                                        if (isMyAssignment && teacherTimetable && teacherTimetable[dayOfWeek]) {
+                                            const daySchedule = teacherTimetable[dayOfWeek];
+                                            isBusy = daySchedule.some(p => {
+                                                if (p.is_break) return false;
+                                                const currentClassId = classSection.split(",")[0];
+                                                const currentSectionId = classSection.split(",")[1];
+                                                if (String(p.class_id) === String(currentClassId) && String(p.section_id) === String(currentSectionId)) {
+                                                    return false; // same class/section slot
+                                                }
+                                                
+                                                const pStart = p.start_time?.slice(0, 5);
+                                                const pEnd = p.end_time?.slice(0, 5);
+                                                const eStart = entry.start_time;
+                                                const eEnd = entry.end_time;
+                                                
+                                                if (!eStart || !eEnd || !pStart || !pEnd) return false;
+                                                
+                                                return pStart < eEnd && pEnd > eStart;
+                                            });
+                                        }
+
+                                        if (isBusy) return null; // Prevent double booking
+
+                                        const subjectName = a.Subject?.name || a.subject?.name || "Subject";
+                                        const teacherName =
+                                            a.Teacher?.User?.name ||
+                                            a.teacher?.user?.name ||
+                                            a.teacher?.User?.name ||
+                                            "Teacher";
+                                        return (
+                                            <MenuItem key={a.id} value={a.id}>
+                                                {subjectName} - {teacherName}
+                                            </MenuItem>
+                                        );
+                                    })}
+                                </Select>
+                            </FormControl>
+                        </Stack>
+                    </Box>
+                ))}
+
+                <Button
+                    startIcon={<Add />}
+                    onClick={handleAddEntry}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                    Add Period
                 </Button>
-                <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-                    Save Day
+            </DialogContent>
+            
+            <DialogActions sx={{ p: 2.5, bgcolor: 'background.default' }}>
+                <Button onClick={onClose} sx={{ color: 'text.secondary', fontWeight: 600 }}>Cancel</Button>
+                <Button 
+                    onClick={handleSubmit} 
+                    variant="contained" 
+                    disabled={loading}
+                    sx={{ px: 3, fontWeight: 600, borderRadius: 2, boxShadow: 'none' }}
+                >
+                    {loading ? "Saving..." : "Save Day"}
                 </Button>
             </DialogActions>
         </Dialog>

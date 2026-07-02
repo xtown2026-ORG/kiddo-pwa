@@ -6,7 +6,7 @@ import { getMyProfile } from "../modules/profile/profile.api";
 import { useNavigate } from "react-router-dom";
 
 export default function ApprovalPending() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [checking, setChecking] = useState(false);
   const navigate = useNavigate();
 
@@ -15,7 +15,20 @@ export default function ApprovalPending() {
     try {
       setChecking(true);
       const res = await getMyProfile(user.role);
-      const status = res?.data?.approval_status;
+      const data = res?.data || {};
+      const status = data?.approval_status || data?.user?.approval_status;
+      const firstLogin =
+        typeof data?.first_login === "boolean"
+          ? data.first_login
+          : typeof data?.user?.first_login === "boolean"
+            ? data.user.first_login
+            : undefined;
+
+      updateUser?.({
+        ...(status ? { approval_status: status } : {}),
+        ...(typeof firstLogin === "boolean" ? { first_login: firstLogin } : {}),
+      });
+
       if (status === "approved") {
         navigate(`/${user.role}/dashboard`, { replace: true });
       }

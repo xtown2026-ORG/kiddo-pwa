@@ -7,8 +7,8 @@ export default function ForceProfileCompletion({ children }) {
 
     if (loading) return null;
 
-    if (user && user.first_login) {
-        const completionPath = user?.role === "parent" ? "/parent/profile" : "/first-login";
+    if (user && user.role !== "parent" && user.first_login) {
+        const completionPath = "/first-login";
         // Already on the target page — don't redirect again (prevents infinite loop)
         if (location.pathname === completionPath) {
             return children;

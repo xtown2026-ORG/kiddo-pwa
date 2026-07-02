@@ -13,12 +13,14 @@ import { AutoAwesomeRounded } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import LoginForm from "../modules/login/LoginForm";
 import { useEffect, useState } from "react";
+import appIcon from "../assets/app-icon-192.png";
 
 export default function Login() {
   const { user, loading, logout } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const [blocked, setBlocked] = useState(false);
+  const hasKnownUnapprovedStatus = false;
 
   useEffect(() => {
     if (!user?.role) return;
@@ -34,21 +36,20 @@ export default function Login() {
   if (user) {
     if (user.role === "student") {
       if (user.first_login) return <Navigate to="/first-login" replace />;
-      if (user.approval_status !== "approved") {
+      if (hasKnownUnapprovedStatus) {
         return <Navigate to="/approval-pending" replace />;
       }
       return <Navigate to="/student/dashboard" replace />;
     }
     if (user.role === "teacher") {
       if (user.first_login) return <Navigate to="/first-login" replace />;
-      if (user.approval_status !== "approved") {
+      if (hasKnownUnapprovedStatus) {
         return <Navigate to="/approval-pending" replace />;
       }
       return <Navigate to="/teacher/dashboard" replace />;
     }
     if (user.role === "parent") {
-      if (user.first_login) return <Navigate to="/parent/profile" replace />;
-      if (user.approval_status !== "approved") {
+      if (hasKnownUnapprovedStatus) {
         return <Navigate to="/approval-pending" replace />;
       }
       return <Navigate to="/parent/dashboard" replace />;
@@ -59,11 +60,14 @@ export default function Login() {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
-        position: "relative",
+        height: "100dvh",
+        width: "100vw",
+        boxSizing: "border-box",
+        position: "fixed",
+        inset: 0,
         overflow: "hidden",
+        overscrollBehavior: "none",
         px: { xs: 2, sm: 3 },
-        py: { xs: 6, sm: 8 },
         fontFamily: '"Sora", "Baloo 2", "Trebuchet MS", sans-serif',
         background: isDark
           ? "radial-gradient(1000px circle at 10% 10%, rgba(30,41,59,0.65) 0%, transparent 45%), radial-gradient(900px circle at 90% 0%, rgba(14,116,144,0.45) 0%, transparent 55%), linear-gradient(180deg, #0a0f1f 0%, #111827 100%)"
@@ -144,12 +148,13 @@ export default function Login() {
         }}
       />
 
-      <Container maxWidth="lg" sx={{ position: "relative", zIndex: 1 }}>
+      <Container maxWidth="lg" sx={{ position: "relative", zIndex: 1, height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Box
           sx={{
+            width: "100%",
             display: "grid",
             gridTemplateColumns: { xs: "1fr", md: "1.1fr 0.9fr" },
-            gap: { xs: 6, md: 8 },
+            gap: { xs: 2, sm: 4, md: 8 },
             alignItems: "center",
           }}
         >
@@ -172,7 +177,7 @@ export default function Login() {
                   }}
                 >
                   <Avatar
-                    src="/android-chrome-192x192.png"
+                    src={appIcon}
                     alt="kiddoshadow logo"
                     variant="rounded"
                     sx={{ width: 40, height: 40 }}

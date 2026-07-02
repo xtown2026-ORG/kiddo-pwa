@@ -14,23 +14,23 @@ export const pwaManifest = {
   dir: 'ltr',
   icons: [
     {
-      src: '/pwa-64x64.png',
-      sizes: '64x64',
-      type: 'image/png'
-    },
-    {
-      src: '/android-chrome-192x192.png',
+      src: '/assets/app-icon-192.png',
       sizes: '192x192',
       type: 'image/png'
     },
     {
-      src: '/android-chrome-192x192.png',
-      sizes: '512x512',
+      src: '/assets/app-icon-192.png',
+      sizes: '192x192',
       type: 'image/png'
     },
     {
-      src: '/android-chrome-192x192.png',
-      sizes: '512x512',
+      src: '/assets/app-icon-192.png',
+      sizes: '192x192',
+      type: 'image/png'
+    },
+    {
+      src: '/assets/app-icon-192.png',
+      sizes: '192x192',
       type: 'image/png',
       purpose: 'any maskable'
     }
@@ -55,21 +55,21 @@ export const pwaManifest = {
       short_name: 'Dashboard',
       description: 'Go to your dashboard',
       url: '/student/dashboard',
-      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/assets/app-icon-192.png', sizes: '192x192' }]
     },
     {
       name: 'AI Chat',
       short_name: 'AI Chat',
       description: 'Start AI conversation',
       url: '/student/ai-chat',
-      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/assets/app-icon-192.png', sizes: '192x192' }]
     },
     {
       name: 'Homework',
       short_name: 'Homework',
       description: 'View homework assignments',
       url: '/student/diary',
-      icons: [{ src: '/android-chrome-192x192.png', sizes: '192x192' }]
+      icons: [{ src: '/assets/app-icon-192.png', sizes: '192x192' }]
     }
   ]
 };

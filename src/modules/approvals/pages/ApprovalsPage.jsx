@@ -130,7 +130,7 @@ export default function ApprovalsPage() {
             setActionError("");
             if (type === "parent_profile") {
                 await approveParentRequest(id, action);
-                setParentRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
+                setParentRequests(prev => prev.filter(r => resolveParentId(r) !== Number(id)));
             } else {
                 await approveRequest(type, id, action);
                 setStudentRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
@@ -142,34 +142,17 @@ export default function ApprovalsPage() {
         }
     };
 
-    const sortApprovalsAscending = useMemo(
+    const sortApprovalsDescending = useMemo(
         () => (items) =>
             [...items].sort((left, right) => {
+                const leftDate = new Date(left.updated_at || left.created_at || left.updatedAt || left.createdAt || 0);
+                const rightDate = new Date(right.updated_at || right.created_at || right.updatedAt || right.createdAt || 0);
+
+                const timeDiff = rightDate.getTime() - leftDate.getTime();
+                if (timeDiff !== 0) return timeDiff;
+
                 const leftName = getDisplayName(left, activeTab);
                 const rightName = getDisplayName(right, activeTab);
-                const leftHasProfileName = !isInvalidName(left?.user?.name || left?.name);
-                const rightHasProfileName = !isInvalidName(right?.user?.name || right?.name);
-
-                if (leftHasProfileName !== rightHasProfileName) {
-                    return leftHasProfileName ? -1 : 1;
-                }
-
-                const byName = String(leftName).localeCompare(String(rightName), undefined, {
-                    numeric: true,
-                    sensitivity: "base",
-                });
-                if (byName !== 0) return byName;
-
-                const leftUsername =
-                    left?.user?.username ||
-                    left?.student?.user?.username ||
-                    left?.username ||
-                    "";
-                const rightUsername =
-                    right?.user?.username ||
-                    right?.student?.user?.username ||
-                    right?.username ||
-                    "";
 
                 return String(leftUsername).localeCompare(String(rightUsername), undefined, {
                     numeric: true,
@@ -180,8 +163,8 @@ export default function ApprovalsPage() {
     );
 
     const requests = activeTab === "students"
-        ? sortApprovalsAscending(studentRequests)
-        : sortApprovalsAscending(parentRequests);
+        ? sortApprovalsDescending(studentRequests)
+        : sortApprovalsDescending(parentRequests);
 
     if (loading) return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>;
 
@@ -247,7 +230,7 @@ export default function ApprovalsPage() {
                             req.student?.section?.name ||
                             req.section_id ||
                             "-";
-                        const requestedText = formatRequestedAt(req.updated_at || req.created_at);
+                        const requestedText = formatRequestedAt(req.updated_at || req.created_at || req.updatedAt || req.createdAt);
                         return (
                         <Card
                             key={approvalId || `${req.student_id}-${req.section_id}`}
@@ -275,7 +258,7 @@ export default function ApprovalsPage() {
                                               ? `${req.relation_type || "Parent"} • Class ${className} - ${sectionName}`
                                               : `Class ${className} - ${sectionName}`}
                                         </Typography>
-                                        <Typography variant="caption" color="text.secondary">
+                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
                                             {requestedText}
                                         </Typography>
 
@@ -381,26 +364,18 @@ function resolveParentId(req) {
     const raw =
         req?.parent_id ??
         req?.parent?.id ??
+        req?.id ??
         req?.user_id ??
-        req?.user?.id ??
-        req?.id;
+        req?.user?.id;
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatRequestedAt(ts) {
-    if (!ts) return "Requested just now";
+    if (!ts) return "Date: N/A\nTime: N/A";
 
     const date = new Date(ts);
-    const ms = Date.now() - date.getTime();
-    if (!Number.isFinite(ms) || ms < 60 * 1000) return "Requested just now";
-
-    const mins = Math.floor(ms / (60 * 1000));
-    if (mins < 60) return `Requested ${mins} min ago`;
-
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `Requested ${hours} hr ago`;
-
-    const days = Math.floor(hours / 24);
-    return `Requested ${days} day${days > 1 ? "s" : ""} ago`;
+    const dateStr = date.toLocaleDateString();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `Date: ${dateStr}\nTime: ${timeStr}`;
 }

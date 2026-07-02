@@ -70,6 +70,9 @@ const AcademicDomainsPage = lazy(() =>
 const PersonalizedInsightsPage = lazy(() =>
   import("../modules/personalized/PersonalizedInsightsPage")
 );
+const StudentVisualTutorPage = lazy(() =>
+  import("../modules/visual-tutor/StudentVisualTutorPage")
+);
 const MindScopePage = lazy(() =>
   import("../modules/mindscope/pages/MindScopePage")
 );
@@ -167,6 +170,7 @@ export default function StudentApp() {
               <Route path="results" element={<StudentResultsPage />} />
               <Route path="academic-domains" element={<AcademicDomainsPage />} />
               <Route path="personalized" element={<PersonalizedInsightsPage />} />
+              <Route path="visual-tutor" element={<StudentVisualTutorPage />} />
               <Route path="mindscope" element={<MindScopePage />} />
               <Route path="hobbies" element={<HobbiesPage />} />
               <Route path="hobbies/selected" element={<HobbiesSelectedPage />} />

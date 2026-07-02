@@ -12,16 +12,23 @@ import { useNotifications } from "./useNotifications";
 import NotificationsList from "./NotificationsList";
 import CreateNotificationDialog from "./CreateNotificationDialog";
 import { useAuth } from "../../auth/AuthProvider";
+import ParentChildSwitcher from "../parents/ParentChildSwitcher";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const { selectedChild } = useParentChild();
   const {
     items,
     loading,
     error,
     acknowledge,
     refresh // Now available
-  } = useNotifications();
+  } = useNotifications(
+    user?.role === "parent" && selectedChild?.id
+      ? { student_id: selectedChild.id }
+      : {}
+  );
 
   const [showCreate, setShowCreate] = useState(false);
 
@@ -48,6 +55,7 @@ export default function NotificationsPage() {
       <Typography variant="h6" sx={{ mb: 2 }}>
         Notifications
       </Typography>
+      {user?.role === "parent" ? <ParentChildSwitcher label="Student" /> : null}
 
       <NotificationsList
         items={items}

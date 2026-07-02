@@ -1,13 +1,3 @@
-const DEFAULT_SUBJECT_TOPICS = {
-  English: ["Grammar", "Comprehension", "Writing", "Vocabulary"],
-  Mathematics: ["Algebra", "Geometry", "Trigonometry", "Statistics"],
-  Science: ["Physics", "Chemistry", "Biology", "Lab Skills"],
-  "Social Science": ["History", "Geography", "Civics", "Economics"],
-  "Computer Science": ["Programming", "Data Structures", "Logic", "Databases"],
-  Tamil: ["Grammar", "Poetry", "Reading", "Writing"],
-  Hindi: ["Grammar", "Poetry", "Reading", "Writing"],
-};
-
 const DEFAULT_CLASS_SUBJECTS = [
   "English",
   "Mathematics",
@@ -44,18 +34,6 @@ const getSectionName = (assignment) =>
 
 const getSubjectName = (assignment) =>
   assignment?.Subject?.name || assignment?.subject?.name || assignment?.subject_name || "Subject";
-
-const getSubjectTopics = (subjectName) => {
-  const exact = DEFAULT_SUBJECT_TOPICS[subjectName];
-  if (exact) return exact;
-  const normalized = String(subjectName || "").toLowerCase();
-  if (normalized.includes("english")) return DEFAULT_SUBJECT_TOPICS.English;
-  if (normalized.includes("math")) return DEFAULT_SUBJECT_TOPICS.Mathematics;
-  if (normalized.includes("science")) return DEFAULT_SUBJECT_TOPICS.Science;
-  if (normalized.includes("computer")) return DEFAULT_SUBJECT_TOPICS["Computer Science"];
-  if (normalized.includes("social")) return DEFAULT_SUBJECT_TOPICS["Social Science"];
-  return ["Concept 1", "Concept 2", "Concept 3", "Concept 4"];
-};
 
 export const normalizeAssignments = (assignments = []) =>
   (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
@@ -119,19 +97,15 @@ export const buildAttendanceMap = (items = []) => {
   );
 };
 
-const buildTopicBreakdown = (student, subjectName) => {
-  const topics = getSubjectTopics(subjectName);
-  const seedBase = `${student?.id || 0}-${subjectName}`;
-
-  return topics.map((topic, index) => {
-    const seed = Math.abs(hashString(`${seedBase}-${topic}-${index}`));
-    const score = 28 + (seed % 63);
-    return {
-      topic,
-      score,
-      status: score > 75 ? "strong" : score < 40 ? "weak" : "average",
-    };
-  });
+const buildSubjectSummary = (student, subjectName) => {
+  return {
+    subject: subjectName,
+    marks: 0,
+    status: "average",
+    weakTopics: [],
+    strongTopics: [],
+    topics: [],
+  };
 };
 
 const resolveClassSubjects = (scope, assignments = []) => {
@@ -142,19 +116,6 @@ const resolveClassSubjects = (scope, assignments = []) => {
 
   const merged = [...new Set([...scopedSubjects, ...DEFAULT_CLASS_SUBJECTS])];
   return merged.slice(0, 6);
-};
-
-const buildSubjectSummary = (student, subjectName) => {
-  const topics = buildTopicBreakdown(student, subjectName);
-  const marks = Math.round(topics.reduce((sum, topic) => sum + topic.score, 0) / topics.length);
-  return {
-    subject: subjectName,
-    marks,
-    status: marks > 75 ? "strong" : marks < 40 ? "weak" : "average",
-    weakTopics: topics.filter((topic) => topic.status === "weak"),
-    strongTopics: topics.filter((topic) => topic.status === "strong"),
-    topics,
-  };
 };
 
 const fallbackAttendance = (student) => {
@@ -307,7 +268,7 @@ export const getStudentDetailSections = ({ roleMode, studentReport }) => {
 
 export const getFallbackHint = (items = []) =>
   items.some((item) => item?.source === "fallback")
-    ? "Academic analysis is using structured development data where live marks are not yet available."
+    ? "No AI test data available. Currently showing baseline estimates."
     : "";
 
 export const resolveClassTeacherSubjects = resolveClassSubjects;

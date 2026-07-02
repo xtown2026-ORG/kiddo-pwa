@@ -2,7 +2,7 @@ import { Box } from "@mui/material";
 import MessageBubble from "./MessageBubble";
 import { useEffect, useRef } from "react";
 
-export default function ChatList({ messages, userAvatar }) {
+export default function ChatList({ messages, userAvatar, renderAfterMessage }) {
   const bottomRef = useRef(null);
   const prevLenRef = useRef(0);
 
@@ -19,9 +19,12 @@ export default function ChatList({ messages, userAvatar }) {
   }, [messages]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", p: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", p: 2, minWidth: 0, overflowX: "hidden" }}>
       {messages.map((msg, index) => (
-        <MessageBubble key={index} message={msg} userAvatar={userAvatar} />
+        <Box key={index} sx={{ minWidth: 0 }}>
+          <MessageBubble message={msg} userAvatar={userAvatar} />
+          {renderAfterMessage ? renderAfterMessage(msg, index) : null}
+        </Box>
       ))}
       <div ref={bottomRef} />
     </Box>

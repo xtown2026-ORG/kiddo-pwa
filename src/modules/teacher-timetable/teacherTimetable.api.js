@@ -11,3 +11,6 @@ export const getMyTeacherAssignments = () =>
 
 export const getSectionAssignments = (sectionId) =>
   api.get(`/teacher-assignments/section/${sectionId}`);
+
+export const getSectionTimetable = (classId, sectionId) =>
+  api.get(`/timetables/section`, { params: { class_id: classId, section_id: sectionId } });
