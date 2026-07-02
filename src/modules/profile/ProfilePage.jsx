@@ -18,9 +18,11 @@ import { changePasswordApi } from "../../api/auth.api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import { Close } from "@mui/icons-material";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { selectedChild } = useParentChild();
   const navigate = useNavigate();
   const {
     profile,
@@ -116,6 +118,23 @@ export default function ProfilePage() {
     );
   }
 
+  const effectiveProfile =
+    user?.role === "parent" && selectedChild
+      ? {
+          ...profile,
+          student: {
+            ...(profile?.student || {}),
+            ...(selectedChild.raw?.student || {}),
+          },
+          class: selectedChild.className
+            ? { ...(profile?.class || {}), class_name: selectedChild.className, id: selectedChild.classId }
+            : profile?.class,
+          section: selectedChild.sectionName
+            ? { ...(profile?.section || {}), name: selectedChild.sectionName, id: selectedChild.sectionId }
+            : profile?.section,
+        }
+      : profile;
+
   return (
     <Container maxWidth="sm" sx={{ mt: 4, pb: 4 }}>
       <Snackbar
@@ -150,7 +169,7 @@ export default function ProfilePage() {
             </IconButton>
           </Stack>
           <ProfileForm
-            profile={profile}
+            profile={effectiveProfile}
             onSave={saveProfile}
             onSubmit={handleProfileSubmit}
             onAvatarUpload={uploadAvatar}
@@ -185,6 +204,24 @@ export default function ProfilePage() {
           spacing={2}
           onSubmit={handleChangePassword}
         >
+          <input
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={user?.username || profile?.email || profile?.phone || profile?.name || ""}
+            readOnly
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              opacity: 0,
+              pointerEvents: "none",
+              height: 0,
+              width: 0,
+              border: 0,
+              padding: 0,
+            }}
+          />
           <TextField
             label="Current Password"
             type="password"

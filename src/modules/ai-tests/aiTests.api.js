@@ -21,5 +21,5 @@ export const submitStudentAssignedTest = (id, answers, options = {}) =>
 
 export const getStudentTestLockStatus = () => api.get("/student/ai-tests/lock-status");
 
-export const getParentAssignedTests = () => api.get("/parent/ai-tests");
+export const getParentAssignedTests = (params = {}) => api.get("/parent/ai-tests", { params });
 

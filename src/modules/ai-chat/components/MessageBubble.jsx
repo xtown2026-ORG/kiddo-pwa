@@ -59,6 +59,24 @@ export default function MessageBubble({ message, userAvatar }) {
                         : theme.palette.primary.contrastText,
                 }}
             >
+                {!isAi && message.imagePreviewUrl && (
+                    <Box
+                        component="img"
+                        src={message.imagePreviewUrl}
+                        alt={message.imageName || "Uploaded question"}
+                        sx={{
+                            display: "block",
+                            width: "100%",
+                            maxWidth: 220,
+                            maxHeight: 220,
+                            objectFit: "cover",
+                            borderRadius: 1.5,
+                            mb: message.text || message.content ? 1 : 0,
+                            bgcolor: "rgba(255,255,255,0.16)",
+                        }}
+                    />
+                )}
+
                 {isAi && parsed ? (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
                         {parsed.visual && (
@@ -94,16 +112,18 @@ export default function MessageBubble({ message, userAvatar }) {
                         )}
                     </Box>
                 ) : (
-                    <Typography
-                        variant="body1"
-                        sx={{
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                            lineHeight: 1.6,
-                        }}
-                    >
-                        {message.text || message.content}
-                    </Typography>
+                    <Box>
+                        <Typography
+                            variant="body1"
+                            sx={{
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                                lineHeight: 1.6,
+                            }}
+                        >
+                            {message.text || message.content}
+                        </Typography>
+                    </Box>
                 )}
             </Paper>
 
@@ -126,9 +146,9 @@ export default function MessageBubble({ message, userAvatar }) {
 
 function parseAiSections(raw) {
     const text = String(raw || "");
-    const bestFormatMatch = text.match(/best format\s*[:\-]\s*(diagram|table|pie)/i);
-    const visualMatch = text.match(/visual explanation\s*[:\-]\s*([\s\S]*?)(?=\n\s*text explanation\s*[:\-]|$)/i);
-    const textMatch = text.match(/text explanation\s*[:\-]\s*([\s\S]*)$/i);
+    const bestFormatMatch = text.match(/best format\s*[:-]\s*(diagram|table|pie)/i);
+    const visualMatch = text.match(/visual explanation\s*[:-]\s*([\s\S]*?)(?=\n\s*text explanation\s*[:-]|$)/i);
+    const textMatch = text.match(/text explanation\s*[:-]\s*([\s\S]*)$/i);
 
     if (!visualMatch && !textMatch) return null;
 
@@ -245,7 +265,7 @@ function parseMarkdownTable(text) {
 }
 
 function hasPieData(text) {
-    return /%/.test(text) && /[:\-]/.test(text);
+    return /%/.test(text) && /[:-]/.test(text);
 }
 
 function parsePieData(text) {
@@ -253,7 +273,7 @@ function parsePieData(text) {
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
     for (const line of lines) {
-        const m = line.match(/^[\-\*\d\.\)]*\s*([A-Za-z][A-Za-z0-9\s_]+)\s*[:\-]\s*(\d{1,3})\s*%/);
+        const m = line.match(/^[-*\d.)]*\s*([A-Za-z][A-Za-z0-9\s_]+)\s*[:-]\s*(\d{1,3})\s*%/);
         if (m) {
             slices.push({ label: m[1].trim(), value: Number(m[2]) });
         }

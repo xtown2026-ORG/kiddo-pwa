@@ -1,40 +1,28 @@
 import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, Avatar, Divider, IconButton } from "@mui/material";
 import {
   Book,
-  ReceiptLong,
   CalendarMonth,
-  Person,
   Close,
-  Palette,
   Logout,
   AccountBalanceWallet,
-  AutoAwesome,
-  Insights,
-  Science,
-  Terminal,
-  TravelExplore,
-  SportsEsports,
+  FactCheck,
+  Assessment,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
+import { useParentChild } from "../modules/parents/ParentChildContext";
 
 export default function ParentSidebar({ open, onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { selectedChild } = useParentChild();
 
   const menuItems = [
+    { label: "Results", icon: <Assessment />, path: "/parent/results" },
     { label: "Diary", icon: <Book />, path: "/parent/diary" },
-    { label: "Report Cards", icon: <ReceiptLong />, path: "/parent/report-cards" },
     { label: "Timetable", icon: <CalendarMonth />, path: "/parent/timetable" },
+    { label: "Attendance", icon: <FactCheck />, path: "/parent/attendance" },
     { label: "Payments", icon: <AccountBalanceWallet />, path: "/parent/payments" },
-    { label: "Foundation Hub (6-7)", icon: <AutoAwesome />, path: "/parent/foundation-stage" },
-    { label: "Logical Thinking & Aptitude", icon: <Insights />, path: "/parent/foundation-stage/logical-thinking-aptitude" },
-    { label: "Basic Science Exploration", icon: <Science />, path: "/parent/foundation-stage/basic-science-exploration" },
-    { label: "Intro to Coding", icon: <Terminal />, path: "/parent/foundation-stage/intro-to-coding" },
-    { label: "General Knowledge Builder", icon: <TravelExplore />, path: "/parent/foundation-stage/general-knowledge-builder" },
-    { label: "Gamified Learning System", icon: <SportsEsports />, path: "/parent/foundation-stage/gamified-learning-system" },
-    { label: "Themes", icon: <Palette />, path: "/parent/themes" },
-    { label: "Profile", icon: <Person />, path: "/parent/profile" },
   ];
 
   const handleNavigate = (path) => {
@@ -75,7 +63,9 @@ export default function ParentSidebar({ open, onClose }) {
           </Avatar>
           <Box>
             <Typography variant="subtitle1" fontWeight="bold">{user?.name}</Typography>
-            <Typography variant="caption" color="text.secondary">Parent</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {selectedChild?.name ? `Parent • ${selectedChild.name}` : "Parent"}
+            </Typography>
           </Box>
         </Box>
       </Link>
@@ -111,7 +101,7 @@ export default function ParentSidebar({ open, onClose }) {
       <Box sx={{ px: 2, pb: 2, pt: 1, display: "flex", justifyContent: "center" }}>
         <Box
           component="img"
-          src="/xtown%20logo.jpg"
+          src="/xtown%20logo1.jpg"
           alt="xtown logo"
           sx={{ width: 120, maxWidth: "100%", height: "auto", objectFit: "contain" }}
         />

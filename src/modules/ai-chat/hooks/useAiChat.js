@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { askAiQuestion } from "../api/aiChat.api";
+import { askAiImageQuestion, askAiQuestion } from "../api/aiChat.api";
 
 export function useAiChat({ classLevel, userId }) {
   const historyKey = useMemo(
@@ -89,10 +89,23 @@ export function useAiChat({ classLevel, userId }) {
     }
   }
 
-  async function sendMessage(text, preferredLanguage = null) {
+  async function sendMessage(text, preferredLanguage = null, sendOptions = {}) {
+    const options =
+      preferredLanguage && typeof preferredLanguage === "object"
+        ? preferredLanguage
+        : sendOptions;
+    const language =
+      preferredLanguage && typeof preferredLanguage === "string"
+        ? preferredLanguage
+        : null;
+    const selectedImage = options?.image || null;
+    const subject = options?.subject ?? null;
+
     const userMsg = {
       role: "user",
       text,
+      imagePreviewUrl: options?.imagePreviewUrl,
+      imageName: options?.imageName,
       timestamp: new Date(),
     };
 
@@ -105,16 +118,23 @@ export function useAiChat({ classLevel, userId }) {
     setLoading(true);
 
     try {
-      const res = await askAiQuestion(
-        {
-          question: text,
-          classLevel,
-          language: preferredLanguage || undefined,
-          preferredLanguage: preferredLanguage || undefined,
-          lang: preferredLanguage || undefined,
-        },
-        preferredLanguage || undefined
-      );
+      const res = selectedImage
+        ? await askAiImageQuestion({
+            image: selectedImage,
+            question: text,
+            subject,
+          })
+        : await askAiQuestion(
+            {
+              question: text,
+              subject,
+              classLevel,
+              language: language || undefined,
+              preferredLanguage: language || undefined,
+              lang: language || undefined,
+            },
+            language || undefined
+          );
 
       const answerText =
         res?.data?.answer ??
@@ -140,6 +160,8 @@ export function useAiChat({ classLevel, userId }) {
       const fallbackText =
         isUnauthorized
           ? "Session required for AI. Please login again and retry."
+          : selectedImage
+          ? "Unable to read the uploaded image right now. Please try again."
           : "AI assistant is temporarily unavailable. Please try again.";
 
       const aiMsg = {

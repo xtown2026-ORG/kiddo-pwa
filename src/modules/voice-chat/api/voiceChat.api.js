@@ -35,6 +35,25 @@ export async function askAiVoice(question, classLevel) {
       throw new Error(`Voice API failed (${response.status})`);
     }
 
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
+    if (isJson) {
+      const data = await response.json();
+      const result =
+        data?.result && typeof data.result === "object"
+          ? data.result
+          : {};
+      return {
+        data,
+        result,
+        answer: result?.answer || "",
+        contentType,
+        subtitle: "",
+        textOnly: data?.textOnly === true,
+      };
+    }
+
     const subtitleHeader = response.headers.get("x-subtitle-text");
     let subtitle = "";
     if (subtitleHeader) {
@@ -46,7 +65,12 @@ export async function askAiVoice(question, classLevel) {
     }
 
     const audioBlob = await response.blob();
-    return { data: audioBlob, subtitle };
+    return {
+      data: audioBlob,
+      contentType,
+      subtitle,
+      textOnly: false,
+    };
   } catch (error) {
     if (error?.name === "AbortError" || error?.name === "TimeoutError") {
       throw new Error(`Voice request timed out after ${Math.floor(timeoutMs / 1000)} seconds`);

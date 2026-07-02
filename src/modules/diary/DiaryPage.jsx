@@ -17,14 +17,22 @@ import { useDiary } from "./useDiary";
 import { useAuth } from "../../auth/AuthProvider";
 import CreateHomeworkDialog from "./CreateHomeworkDialog";
 import DatePickerField from "../../components/DatePickerField";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export default function DiaryPage() {
   const { user } = useAuth();
+  const { selectedChild } = useParentChild();
   const today = new Date().toISOString().split("T")[0];
   const [filterDate, setFilterDate] = useState(today);
   const filters = useMemo(() => {
-    return filterDate ? { date: filterDate } : {};
-  }, [filterDate]);
+    const next = filterDate ? { date: filterDate } : {};
+    if (user?.role === "parent" && selectedChild?.id) {
+      next.student_id = selectedChild.id;
+      next.class_id = selectedChild.classId;
+      next.section_id = selectedChild.sectionId;
+    }
+    return next;
+  }, [filterDate, selectedChild?.id, selectedChild?.classId, selectedChild?.sectionId, user?.role]);
 
   const { items, loading, error, refresh } = useDiary(filters);
   const [showCreate, setShowCreate] = useState(false);
@@ -52,6 +60,11 @@ export default function DiaryPage() {
       <Typography variant="h5" fontWeight="bold" sx={{ mb: 3 }}>
         My Diary
       </Typography>
+      {user?.role === "parent" && selectedChild?.name ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Viewing diary for {selectedChild.name}
+        </Typography>
+      ) : null}
 
       <Stack spacing={2} sx={{ mb: 2 }}>
         <DatePickerField

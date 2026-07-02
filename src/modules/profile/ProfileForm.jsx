@@ -8,13 +8,16 @@ import {
   Alert,
   IconButton,
   Typography,
+  Menu,
+  MenuItem,
 } from "@mui/material";
-import { PhotoCamera, Delete, CloudUpload } from "@mui/icons-material";
+import { PhotoCamera, Delete, CloudUpload, SwapHoriz } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createImagePreview, revokeImagePreview } from "../../utils/imageUtils";
 import DatePickerField from "../../components/DatePickerField";
 import { normalizeTitleCaseFields } from "../../utils/textFormat";
+import { useParentChild } from "../parents/ParentChildContext";
 
 const TITLE_CASE_FIELDS = [
   "name",
@@ -38,11 +41,18 @@ export default function ProfileForm({
   onClearError,
   isCompleting = false,
 }) {
-  const { register, handleSubmit, control, formState: { errors } } = useForm({
+  const { children, selectedChild, setSelectedChildId } = useParentChild();
+  const initialRelationType =
+    isCompleting && profile?.role === "parent" && profile?.relation_type === "guardian"
+      ? "parent"
+      : profile?.relation_type || "parent";
+
+  const { register, handleSubmit, control, reset, formState: { errors } } = useForm({
     defaultValues: {
       name: profile?.name || "",
       phone: profile?.phone || "",
       email: profile?.email || "",
+      relation_type: initialRelationType,
       dob: profile?.dob || "",
       gender: profile?.gender || "",
       blood_group: profile?.blood_group || "",
@@ -60,8 +70,30 @@ export default function ProfileForm({
   });
 
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+  const [childMenuAnchor, setChildMenuAnchor] = useState(null);
+
+  useEffect(() => {
+    reset({
+      name: profile?.name || "",
+      phone: profile?.phone || "",
+      email: profile?.email || "",
+      relation_type: initialRelationType,
+      dob: profile?.dob || "",
+      gender: profile?.gender || "",
+      blood_group: profile?.blood_group || "",
+      father_name: profile?.father_name || "",
+      mother_name: profile?.mother_name || "",
+      guardian_name: profile?.guardian_name || "",
+      father_occupation: profile?.father_occupation || "",
+      mother_occupation: profile?.mother_occupation || "",
+      family_income: profile?.family_income || "",
+      address: profile?.address || "",
+      designation: profile?.designation || "",
+      qualification: profile?.qualification || "",
+      experience: profile?.experience || "",
+    });
+  }, [profile, reset]);
 
   async function handleAvatarChange(e) {
     const file = e.target.files[0];
@@ -125,6 +157,17 @@ export default function ProfileForm({
 
   const currentAvatarUrl = previewUrl || profile?.avatar_url;
   const hasAvatar = Boolean(currentAvatarUrl);
+  const canSwitchChildren = profile?.role === "parent" && children.length > 1;
+
+  function handleAvatarClick(event) {
+    if (!canSwitchChildren) return;
+    setChildMenuAnchor(event.currentTarget);
+  }
+
+  function handleChildSelect(childId) {
+    setSelectedChildId(Number(childId));
+    setChildMenuAnchor(null);
+  }
 
   return (
     <Box component="form" onSubmit={handleSubmit(handleFormSubmit)}>
@@ -144,12 +187,14 @@ export default function ProfileForm({
         <Box position="relative">
           <Avatar
             src={currentAvatarUrl}
+            onClick={handleAvatarClick}
             sx={{
               width: 120,
               height: 120,
               border: 2,
               borderColor: 'primary.main',
-              borderStyle: uploading ? 'dashed' : 'solid'
+              borderStyle: uploading ? 'dashed' : 'solid',
+              cursor: canSwitchChildren ? 'pointer' : 'default',
             }}
           >
             {uploading && (
@@ -163,6 +208,24 @@ export default function ProfileForm({
             )}
           </Avatar>
 
+          {canSwitchChildren && (
+            <IconButton
+              size="small"
+              onClick={handleAvatarClick}
+              sx={{
+                position: "absolute",
+                right: 0,
+                bottom: 0,
+                bgcolor: "background.paper",
+                border: 1,
+                borderColor: "divider",
+              }}
+              aria-label="Switch linked student"
+            >
+              <SwapHoriz fontSize="small" />
+            </IconButton>
+          )}
+
           {uploading && (
             <Box
               position="absolute"
@@ -174,6 +237,17 @@ export default function ProfileForm({
             </Box>
           )}
         </Box>
+
+        {canSwitchChildren && (
+          <Stack spacing={0.5} alignItems="center">
+            <Typography variant="subtitle2" fontWeight={600}>
+              {selectedChild?.name || "Linked Student"}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Tap profile image to switch student
+            </Typography>
+          </Stack>
+        )}
 
         {/* Upload Controls */}
         <Stack direction="row" spacing={1} alignItems="center">
@@ -206,6 +280,18 @@ export default function ProfileForm({
           )}
         </Stack>
 
+        <Menu
+          anchorEl={childMenuAnchor}
+          open={Boolean(childMenuAnchor)}
+          onClose={() => setChildMenuAnchor(null)}
+        >
+          {children.map((child) => (
+            <MenuItem key={child.id} onClick={() => handleChildSelect(child.id)}>
+              {child.name}{child.className ? ` - ${child.className}` : ""}{child.sectionName ? ` ${child.sectionName}` : ""}
+            </MenuItem>
+          ))}
+        </Menu>
+
         {/* Upload Info removed (Chip dependency not used elsewhere) */}
 
         {/* Form Fields */}
@@ -233,8 +319,8 @@ export default function ProfileForm({
           error={Boolean(errors.phone)}
           helperText={
             errors.phone?.message ||
-            ((profile?.role === "student" || profile?.role === "parent")
-              ? "Student and linked parent can use the same phone number."
+            (profile?.role === "student"
+              ? "Student and linked parent can use the same phone number. Other duplicate numbers will show an error when you save."
               : "")
           }
           {...register("phone", {
@@ -256,12 +342,59 @@ export default function ProfileForm({
 
         {/* Parent Fields */}
         {profile?.role === 'parent' && (
-          <TextField
-            label="Email"
-            fullWidth
-            type="email"
-            {...register("email")}
-          />
+          <>
+            <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
+              Parent Details
+            </Typography>
+            <TextField
+              label="Email"
+              fullWidth
+              type="email"
+              {...register("email")}
+            />
+            <TextField
+              label="Relation Type"
+              fullWidth
+              select
+              defaultValue={initialRelationType}
+              SelectProps={{ native: true }}
+              {...register("relation_type")}
+            >
+              <option value="guardian">Guardian</option>
+              <option value="parent">Parent</option>
+            </TextField>
+            <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
+              Linked Student
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
+              <TextField
+                label="Student Name"
+                fullWidth
+                value={profile?.student?.User?.name || profile?.student?.user?.name || profile?.student?.name || "—"}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                label="Admission No"
+                fullWidth
+                value={profile?.student?.admission_no || "—"}
+                InputProps={{ readOnly: true }}
+              />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
+              <TextField
+                label="Class"
+                fullWidth
+                value={profile?.class?.class_name || profile?.student?.Class?.class_name || profile?.student?.class?.class_name || "—"}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                label="Section"
+                fullWidth
+                value={profile?.section?.name || profile?.student?.Section?.name || profile?.student?.section?.name || "—"}
+                InputProps={{ readOnly: true }}
+              />
+            </Stack>
+          </>
         )}
 
         {/* Student Fields */}

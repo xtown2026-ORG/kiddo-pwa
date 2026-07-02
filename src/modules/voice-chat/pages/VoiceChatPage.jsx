@@ -32,6 +32,7 @@ const STATE_LABELS = {
 
 const DEFAULT_PLAYBACK_RATE = 0.5;
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25];
+const AUDIO_CONTENT_TYPES = ["audio/wav", "audio/mpeg"];
 
 const normalizeSubtitle = (text) => {
   const raw = String(text || "").trim();
@@ -51,6 +52,8 @@ export default function VoiceChatPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [robotState, setRobotState] = useState("listening");
   const [subtitle, setSubtitle] = useState("");
+  const [textOnlyMode, setTextOnlyMode] = useState(false);
+  const [textOnlyAnswer, setTextOnlyAnswer] = useState("");
   const [error, setError] = useState("");
   const [playbackRate, setPlaybackRate] = useState(DEFAULT_PLAYBACK_RATE);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -85,6 +88,12 @@ export default function VoiceChatPage() {
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
+
+  useEffect(() => {
+    if (robotState !== "listening" || textOnlyMode) return;
+    subtitleTrackRef.current = null;
+    setSubtitle("");
+  }, [robotState, textOnlyMode]);
 
   const buildSubtitleTrack = (text) => {
     const sentences = String(text || "")
@@ -251,6 +260,10 @@ export default function VoiceChatPage() {
   const handleVoiceQuery = async (text) => {
     if (!text || loading) return;
     setShowIntro(false);
+    stopCurrentPlayback();
+    subtitleTrackRef.current = null;
+    setTextOnlyMode(false);
+    setTextOnlyAnswer("");
     setLoading(true);
     setError("");
     setSubtitle("");
@@ -264,12 +277,58 @@ export default function VoiceChatPage() {
     try {
       try {
         const audioRes = await askAiVoice(text, user?.class_level);
-        const subtitleText = normalizeSubtitle(audioRes?.subtitle || "");
+        const contentType = audioRes?.contentType || audioRes?.data?.type || "";
+        const result = audioRes?.result || {};
+        const textOnly =
+          audioRes?.textOnly === true ||
+          result?.textOnly === true ||
+          contentType.includes("application/json") ||
+          audioRes?.data?.textOnly === true;
+        const answerText = String(result?.answer || "").trim();
+
+        if (textOnly || contentType.includes("application/json")) {
+          const shouldPlayAudio = false;
+          console.log("FRONTEND_VOICE_DECISION", {
+            contentType,
+            textOnly,
+            shouldPlayAudio,
+          });
+          stopCurrentPlayback();
+          subtitleTrackRef.current = null;
+          setSubtitle("");
+          setTextOnlyAnswer("");
+          appendMessage({
+            role: "ai",
+            text: answerText,
+            timestamp: new Date().toISOString(),
+          });
+          setTextOnlyMode(true);
+          setTextOnlyAnswer(answerText);
+          setRobotState("listening");
+          return;
+        }
+
+        const subtitleText = normalizeSubtitle(audioRes?.subtitle || answerText);
+        const hasAudioBlob = audioRes?.data instanceof Blob && audioRes.data.size > 0;
+        const shouldPlayAudio =
+          hasAudioBlob && AUDIO_CONTENT_TYPES.some((type) => contentType.includes(type));
+
+        console.log("FRONTEND_VOICE_DECISION", {
+          contentType,
+          textOnly,
+          shouldPlayAudio,
+        });
+
         appendMessage({
           role: "ai",
           text: subtitleText || "Voice response is ready.",
           timestamp: new Date().toISOString(),
         });
+
+        if (!shouldPlayAudio) {
+          throw new Error("Voice response did not include playable audio");
+        }
+
         try {
           await playAudioBuffer(audioRes?.data, subtitleText);
         } catch (playbackErr) {
@@ -312,6 +371,11 @@ export default function VoiceChatPage() {
   };
 
   const gifState = showIntro ? "hi" : robotState;
+  const robotDisplayText = textOnlyMode
+    ? textOnlyAnswer
+    : robotState === "teaching"
+      ? subtitle
+      : "";
 
   const gifSrcMap = {
     hi: encodeURI("/gif/HI.mp4"),
@@ -393,6 +457,8 @@ export default function VoiceChatPage() {
             onClick={() => {
               startNewChat();
               setSubtitle("");
+              setTextOnlyMode(false);
+              setTextOnlyAnswer("");
               setError("");
               setShowIntro(false);
               setRobotState("listening");
@@ -415,6 +481,8 @@ export default function VoiceChatPage() {
                   onClick={() => {
                     loadConversation(conversation.id);
                     setSubtitle("");
+                    setTextOnlyMode(false);
+                    setTextOnlyAnswer("");
                     setError("");
                     setShowIntro(false);
                     setRobotState("listening");
@@ -520,7 +588,7 @@ export default function VoiceChatPage() {
             {playbackRate}x
           </Button>
         ) : null}
-        {subtitle ? (
+        {robotDisplayText ? (
           <Typography
             variant="body2"
             sx={{
@@ -533,7 +601,7 @@ export default function VoiceChatPage() {
               mx: "auto",
             }}
           >
-            {subtitle}
+            {robotDisplayText}
           </Typography>
         ) : null}
       </Box>

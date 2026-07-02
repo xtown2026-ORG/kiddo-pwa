@@ -30,9 +30,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ParentDashboard from "./ParentDashboard";
 import TeacherDashboard from "./TeacherDashboard";
 import { getMyPaymentLogs } from "../payments/payments.api";
+import { useParentChild } from "../parents/ParentChildContext";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { selectedChild } = useParentChild();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -65,8 +67,8 @@ export default function DashboardPage() {
           setData(res);
         } else if (role === 'parent') {
           const [dashboardRes, paymentRes] = await Promise.all([
-            fetchParentDashboard(),
-            getMyPaymentLogs(),
+            fetchParentDashboard(selectedChild?.id ? { student_id: selectedChild.id } : {}),
+            getMyPaymentLogs(selectedChild?.id ? { student_id: selectedChild.id } : {}),
           ]);
           setData({
             ...dashboardRes,
@@ -80,7 +82,7 @@ export default function DashboardPage() {
       }
     }
     load();
-  }, [hasToken, isStudentDemoRoute, role]);
+  }, [hasToken, isStudentDemoRoute, role, selectedChild?.id]);
 
   if (loading) {
     return (
@@ -115,7 +117,7 @@ export default function DashboardPage() {
                 <Typography variant="h6" fontWeight="bold">{user.name}</Typography>
               </Box>
             </Stack>
-            <IconButton color="inherit" onClick={() => navigate('/parent/notifications')}>
+            <IconButton color="inherit" onClick={() => navigate('/parent/payments')}>
               <NotifIcon />
             </IconButton>
           </Stack>
@@ -125,6 +127,11 @@ export default function DashboardPage() {
 
         {/* Quick Actions / Content */}
         <Container sx={{ mt: 3 }}>
+          {selectedChild?.name ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Viewing {selectedChild.name}
+            </Typography>
+          ) : null}
           <Typography variant="h6" fontWeight="bold" gutterBottom>
             Quick Actions
           </Typography>
@@ -133,15 +140,33 @@ export default function DashboardPage() {
             <Grid item xs={12}>
               <Card
                 sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
-                onClick={() => navigate('/parent/ai-tests')}
+                onClick={() => navigate('/parent/timetable')}
               >
-                <Avatar sx={{ bgcolor: '#FFF4E5', color: '#F57C00', mr: 2 }}>
-                  <EmojiEvents />
+                <Avatar sx={{ bgcolor: '#E3F2FD', color: '#1565C0', mr: 2 }}>
+                  <Timer />
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" fontWeight="bold">Test Performance</Typography>
+                  <Typography variant="subtitle1" fontWeight="bold">Today Timetable</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Track assigned tests and results clearly
+                    Check today&apos;s classes clearly
+                  </Typography>
+                </Box>
+                <ChevronRight color="action" />
+              </Card>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Card
+                sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
+                onClick={() => navigate('/parent/attendance')}
+              >
+                <Avatar sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', mr: 2 }}>
+                  <FactCheck />
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="bold">Attendance Status</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Review attendance summary
                   </Typography>
                 </Box>
                 <ChevronRight color="action" />
@@ -157,9 +182,9 @@ export default function DashboardPage() {
                   <Assignment />
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" fontWeight="bold">Check Homework</Typography>
+                  <Typography variant="subtitle1" fontWeight="bold">Diary Updates</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    View pending assignments
+                    View homework and class notes
                   </Typography>
                 </Box>
                 <ChevronRight color="action" />
@@ -171,7 +196,7 @@ export default function DashboardPage() {
                 sx={{ borderRadius: 4, display: 'flex', alignItems: 'center', p: 2, cursor: 'pointer' }}
                 onClick={() => navigate('/parent/payments')}
               >
-                <Avatar sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', mr: 2 }}>
+                <Avatar sx={{ bgcolor: '#FFF4E5', color: '#F57C00', mr: 2 }}>
                   <AccountBalanceWallet />
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
