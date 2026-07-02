@@ -243,10 +243,7 @@ export default function ClassSessionPage() {
             }
             setAttendanceStudents(
                 [...unique.values()].sort((a, b) => {
-                    const ra = Number(a.rollNo);
-                    const rb = Number(b.rollNo);
-                    if (Number.isFinite(ra) && Number.isFinite(rb)) return ra - rb;
-                    return String(a.name).localeCompare(String(b.name));
+                    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
                 })
             );
         } catch (err) {
@@ -455,18 +452,27 @@ export default function ClassSessionPage() {
                                             End
                                         </Button>
                                     )}
-                                    <Button
-                                        variant="text"
-                                        fullWidth
-                                        sx={{ mt: 1 }}
-                                        onClick={() =>
-                                            currentSession &&
-                                            openAttendance(currentSession, entry)
-                                        }
-                                        disabled={!currentSession}
-                                    >
-                                        {currentSession ? "Mark Attendance" : "Attendance (start first)"}
-                                    </Button>
+                                    {(() => {
+                                        const attendanceSaved = currentSession && currentSession.attendance_marked > 0;
+                                        return (
+                                            <Button
+                                                variant="text"
+                                                fullWidth
+                                                sx={{ mt: 1 }}
+                                                onClick={() =>
+                                                    currentSession &&
+                                                    openAttendance(currentSession, entry)
+                                                }
+                                                disabled={!currentSession || attendanceSaved}
+                                            >
+                                                {!currentSession
+                                                    ? "Attendance (start first)"
+                                                    : attendanceSaved
+                                                        ? "Attendance Saved"
+                                                        : "Mark Attendance"}
+                                            </Button>
+                                        );
+                                    })()}
                                 </CardContent>
                             </Card>
                         </Grid>
@@ -547,7 +553,6 @@ export default function ClassSessionPage() {
                     <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
                         <Chip size="small" color="success" variant="outlined" label="P: Present" />
                         <Chip size="small" color="error" variant="outlined" label="A: Absent" />
-                        <Chip size="small" color="warning" variant="outlined" label="L: Leave" />
                         <Chip size="small" color="info" variant="outlined" label="OD: On Duty" />
                     </Stack>
                     {attendanceError ? (
@@ -659,7 +664,6 @@ export default function ClassSessionPage() {
 const statusOptions = [
     { value: "present", label: "P" },
     { value: "absent", label: "A" },
-    { value: "leave", label: "L" },
     { value: "on_duty", label: "OD" },
 ];
 
@@ -668,7 +672,6 @@ function getAttendanceStatusButtonSx(status) {
         const paletteMap = {
             present: theme.palette.success,
             absent: theme.palette.error,
-            leave: theme.palette.warning,
             on_duty: theme.palette.info,
         };
 

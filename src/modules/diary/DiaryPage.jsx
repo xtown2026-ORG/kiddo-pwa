@@ -100,9 +100,27 @@ export default function DiaryPage() {
           <Assignment sx={{ fontSize: 60, opacity: 0.5, mb: 2 }} />
           <Typography>No homework assigned yet!</Typography>
         </Box>
-      ) : (
-        Object.entries(
-          items.reduce((acc, item) => {
+      ) : (() => {
+        const filteredItems = items.filter(item => {
+          if (!filterDate) return true;
+          const hwDate = item.homework_date ? new Date(item.homework_date).toISOString().split("T")[0] : null;
+          const dueDate = item.due_date ? new Date(item.due_date).toISOString().split("T")[0] : null;
+          const createdAt = (item.created_at || item.createdAt) ? new Date(item.created_at || item.createdAt).toISOString().split("T")[0] : null;
+          
+          return hwDate === filterDate || dueDate === filterDate || (!hwDate && !dueDate && createdAt === filterDate);
+        });
+
+        if (filteredItems.length === 0) {
+          return (
+            <Box sx={{ textAlign: 'center', mt: 5, color: 'text.secondary' }}>
+              <Assignment sx={{ fontSize: 60, opacity: 0.5, mb: 2 }} />
+              <Typography>No homework for the selected date!</Typography>
+            </Box>
+          );
+        }
+
+        return Object.entries(
+          filteredItems.reduce((acc, item) => {
             const raw =
               item.homework_date ||
               item.due_date ||
@@ -135,8 +153,8 @@ export default function DiaryPage() {
                 studentId={user?.role === "student" ? user.student_id : selectedChild?.id}
               />
             </Box>
-        ))
-      )}
+        ));
+      })()}
 
       {canCreate && (
         <>

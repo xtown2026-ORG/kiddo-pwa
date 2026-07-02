@@ -1,35 +1,39 @@
 import {
   Alert,
   Box,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Container,
-  Divider,
   FormControl,
   Grid,
   InputLabel,
-  List,
-  ListItemButton,
-  ListItemText,
   MenuItem,
   Paper,
   Select,
   Stack,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
   Typography,
+  TextField,
+  InputAdornment,
+  useTheme,
+  useMediaQuery,
+  Card,
+  CardContent,
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Assessment,
   MenuBook,
   People,
-  Person,
-  TrendingDown,
-  TrendingUp,
+  Search,
 } from "@mui/icons-material";
+import TopicDetailDialog from "../components/TopicDetailDialog";
 import {
   getTeacherAssignments,
   getTeacherAttendanceSummary,
@@ -64,7 +68,13 @@ export default function StudentsReportsPage() {
   const [serverAnalytics, setServerAnalytics] = useState(null);
   const [roleMode, setRoleMode] = useState("class_teacher");
   const [scopeKey, setScopeKey] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  const [selectedTopicData, setSelectedTopicData] = useState(null);
+  const [selectedTopicStudentName, setSelectedTopicStudentName] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -175,38 +185,25 @@ export default function StudentsReportsPage() {
       students,
       analytics,
     });
-    return sortStudentsForRole(filtered, roleMode);
-  }, [roleMode, selectedScope, students, analytics]);
-
-  useEffect(() => {
-    if (!visibleStudents.length) {
-      setSelectedStudentId(null);
-      return;
+    
+    let sorted = sortStudentsForRole(filtered, roleMode);
+    
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      sorted = sorted.filter(s => 
+        s.name.toLowerCase().includes(q) || 
+        s.username.toLowerCase().includes(q)
+      );
     }
-
-    setSelectedStudentId((current) =>
-      visibleStudents.some((item) => item.studentId === current)
-        ? current
-        : visibleStudents[0].studentId
-    );
-  }, [visibleStudents]);
-
-  const selectedStudent = useMemo(
-    () => visibleStudents.find((item) => item.studentId === selectedStudentId) || null,
-    [visibleStudents, selectedStudentId]
-  );
-
-  const detailSections = useMemo(
-    () => getStudentDetailSections({ roleMode, studentReport: selectedStudent }),
-    [roleMode, selectedStudent]
-  );
+    
+    return sorted;
+  }, [roleMode, selectedScope, students, analytics, searchQuery]);
 
   const fallbackHint = useMemo(() => getFallbackHint(visibleStudents), [visibleStudents]);
 
   const handleRoleChange = (_, value) => {
     setRoleMode(value);
     setScopeKey("");
-    setSelectedStudentId(null);
   };
 
   if (loading) {
@@ -254,7 +251,7 @@ export default function StudentsReportsPage() {
             </Tabs>
 
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid item xs={12} md={6}>
                 <FormControl fullWidth size="small">
                   <InputLabel>{roleMode === "class_teacher" ? "Class Scope" : "Subject Scope"}</InputLabel>
                   <Select
@@ -270,267 +267,309 @@ export default function StudentsReportsPage() {
                   </Select>
                 </FormControl>
               </Grid>
-
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search students by name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
             </Grid>
 
             {fallbackHint ? <Alert severity="info">{fallbackHint}</Alert> : null}
           </Stack>
         </Paper>
 
-        <Grid container spacing={2.5} alignItems="stretch">
-          <Grid item xs={12} md={4} lg={3.8}>
-            <Paper sx={{ borderRadius: 3, overflow: "hidden", height: { xs: "auto", md: "76vh" }, display: "flex", flexDirection: "column" }}>
-              <Box sx={{ p: 2, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Student List
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {visibleStudents.length} student{visibleStudents.length !== 1 ? "s" : ""} in this view
-                </Typography>
-              </Box>
-
-              <Box sx={{ flex: 1, overflowY: "auto" }}>
-                {visibleStudents.length === 0 ? (
-                  <Box sx={{ p: 3 }}>
-                    <Alert severity="info">No students available for the selected teacher scope.</Alert>
-                  </Box>
-                ) : (
-                  <List disablePadding>
-                    {visibleStudents.map((student) => {
-                      const active = student.studentId === selectedStudentId;
-                      const scoreLabel = roleMode === "subject_teacher"
-                        ? `${student.subjectSummary?.marks ?? 0}% ${selectedScope?.subjectName || "Subject"}`
-                        : `${student.overallAverage}% overall`;
-
-                      return (
-                        <ListItemButton
-                          key={student.studentId}
-                          selected={active}
-                          onClick={() => setSelectedStudentId(student.studentId)}
-                          sx={{
-                            alignItems: "flex-start",
-                            px: 2,
-                            py: 1.75,
-                            borderBottom: "1px solid",
-                            borderColor: "divider",
-                          }}
-                        >
-                          <ListItemText
-                            primary={
-                              <Stack spacing={1}>
-                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                                  <Box sx={{ minWidth: 0 }}>
-                                    <Typography fontWeight={700} noWrap>
-                                      {student.name}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary" noWrap>
-                                      {student.username}
-                                    </Typography>
-                                  </Box>
-                                  {student.badge ? (
-                                    <Chip
-                                      size="small"
-                                      label={student.badge}
-                                      color={badgeColorMap[student.badge] || "default"}
-                                      sx={{ fontWeight: 700 }}
-                                    />
-                                  ) : null}
-                                </Stack>
-
-                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                                  <Chip size="small" label={scoreLabel} color={roleMode === "subject_teacher" && student.belowThreshold ? "error" : "primary"} />
-                                  <Chip size="small" label={`Attendance ${student.attendancePct}%`} color={student.attendancePct < 75 ? "warning" : "success"} variant="outlined" />
-                                </Stack>
-
-                                {roleMode === "class_teacher" && student.classWeakSubjects.length ? (
-                                  <Typography variant="caption" color="error.main">
-                                    Weak: {student.classWeakSubjects.map((item) => item.subject).join(", ")}
-                                  </Typography>
-                                ) : null}
-
-                                {roleMode === "subject_teacher" && student.weakTopics.length ? (
-                                  <Typography variant="caption" color="error.main">
-                                    Weak topics: {student.weakTopics.map((item) => item.topic).join(", ")}
-                                  </Typography>
-                                ) : null}
-                              </Stack>
-                            }
-                          />
-                        </ListItemButton>
-                      );
-                    })}
-                  </List>
-                )}
-              </Box>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} md={8} lg={8.2}>
-            <Paper sx={{ borderRadius: 3, p: 3, minHeight: { xs: 420, md: "76vh" }, display: "flex", flexDirection: "column" }}>
-              {!selectedStudent ? (
-                <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Alert severity="info">Select a student to view detailed academic analysis.</Alert>
-                </Box>
+        <Paper sx={{ borderRadius: 3, overflow: "hidden", boxShadow: '0 4px 20px rgba(0,0,0,0.08)', bgcolor: isMobile ? 'transparent' : 'white' }}>
+          {isMobile ? (
+            <Box>
+              {visibleStudents.length === 0 ? (
+                <Alert severity="info">No students available for the selected teacher scope.</Alert>
               ) : (
-                <Stack spacing={2.5} sx={{ height: "100%" }}>
-                  <Box>
-                    <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={2}>
-                      <Box>
-                        <Typography variant="h6" fontWeight="bold">
-                          {selectedStudent.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {selectedStudent.username} • Class {selectedStudent.className} • Section {selectedStudent.sectionName}
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Chip
-                          icon={<Assessment fontSize="small" />}
-                          label={roleMode === "subject_teacher" ? `${detailSections?.headlineScore ?? 0}% in ${selectedScope?.subjectName}` : `${detailSections?.headlineScore ?? 0}% overall`}
-                          color={detailSections?.headlineScore >= 75 ? "success" : detailSections?.headlineScore < 40 ? "error" : "primary"}
-                        />
-                        <Chip
-                          label={`Attendance ${selectedStudent.attendancePct}%`}
-                          color={selectedStudent.attendancePct < 75 ? "warning" : "success"}
-                          variant="outlined"
-                        />
-                      </Stack>
-                    </Stack>
-                  </Box>
+                visibleStudents.map((student) => {
+                  const details = getStudentDetailSections({ roleMode, studentReport: student });
+                  return (
+                    <Card key={student.studentId} variant="outlined" sx={{ mb: 2, borderRadius: 2, bgcolor: "#fff" }}>
+                      <CardContent sx={{ p: 2, pb: "16px !important" }}>
+                        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                          <Box>
+                            <Typography fontWeight="bold">{student.name}</Typography>
+                            <Typography variant="caption" color="textSecondary" display="block">
+                              {student.username} • Class {student.className} • Sec {student.sectionName}
+                            </Typography>
+                          </Box>
+                          <Chip 
+                            label={`${student.attendancePct}%`} 
+                            color={student.attendancePct < 75 ? "warning" : "success"} 
+                            variant={student.attendancePct < 75 ? "filled" : "outlined"} 
+                            size="small" 
+                            sx={{ fontWeight: 600, ml: 1 }}
+                          />
+                        </Box>
 
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
-                      <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
-                        <CardContent>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Academic Analysis
-                          </Typography>
-                          <Stack spacing={1.5}>
-                            <Chip label={selectedStudent.badge || "Steady Progress"} color={badgeColorMap[selectedStudent.badge] || "default"} sx={{ fontWeight: 700, width: "fit-content" }} />
-                            {roleMode === "class_teacher" ? (
-                              <>
-                                <Typography variant="body2">
-                                  Strong subjects: {selectedStudent.strongSubjects.length ? selectedStudent.strongSubjects.map((item) => item.subject).join(", ") : "None"}
-                                </Typography>
-                                <Typography variant="body2" color={selectedStudent.weakSubjects.length ? "error.main" : "text.secondary"}>
-                                  Weak subjects: {selectedStudent.weakSubjects.length ? selectedStudent.weakSubjects.map((item) => item.subject).join(", ") : "None"}
-                                </Typography>
-                                <Typography variant="body2" color={selectedStudent.attendancePct < 75 ? "warning.main" : "text.secondary"}>
-                                  {selectedStudent.attendancePct < 75 ? "Low attendance flagged" : "Attendance is within healthy range"}
-                                </Typography>
-                              </>
-                            ) : (
-                              <>
-                                <Typography variant="body2">
-                                  Subject score: {selectedStudent.subjectSummary?.marks ?? 0}%
-                                </Typography>
-                                <Typography variant="body2" color={selectedStudent.belowThreshold ? "error.main" : "text.secondary"}>
-                                  {selectedStudent.belowThreshold ? "Below 40% threshold" : "Above minimum subject threshold"}
-                                </Typography>
-                                <Typography variant="body2" color={selectedStudent.weakTopics.length ? "error.main" : "text.secondary"}>
-                                  Weak topics: {selectedStudent.weakTopics.length ? selectedStudent.weakTopics.map((item) => item.topic).join(", ") : "None"}
-                                </Typography>
-                              </>
-                            )}
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    </Grid>
+                        {student.badge ? (
+                          <Chip size="small" label={student.badge} color={badgeColorMap[student.badge] || "default"} sx={{ fontWeight: 600, mb: 2 }} />
+                        ) : null}
 
-                    <Grid item xs={12} md={8}>
-                      <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
-                        <CardContent>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Subject Breakdown
-                          </Typography>
-                          <Stack spacing={1.5}>
-                            {detailSections?.subjectSummary?.map((subject) => (
-                              <Box key={subject.subject} sx={{ p: 1.5, borderRadius: 2, bgcolor: "background.default" }}>
-                                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
-                                  <Typography fontWeight={700}>{subject.subject}</Typography>
-                                  <Chip
-                                    size="small"
-                                    label={`${subject.marks}%`}
-                                    color={subject.marks > 75 ? "success" : subject.marks < 40 ? "error" : "primary"}
-                                  />
-                                </Stack>
-                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-                                  {subject.strongTopics?.slice(0, 2).map((topic) => (
-                                    <Chip key={`${subject.subject}-${topic.topic}`} size="small" variant="outlined" color="success" label={`${topic.topic} strong`} />
-                                  ))}
-                                  {subject.weakTopics?.slice(0, 2).map((topic) => (
-                                    <Chip key={`${subject.subject}-${topic.topic}`} size="small" variant="outlined" color="error" label={`${topic.topic} weak`} />
-                                  ))}
-                                </Stack>
-                              </Box>
-                            ))}
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-
-                  <Divider />
-
-                  <Grid container spacing={2} sx={{ flex: 1 }}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
-                        <CardContent>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Weak Topics
-                          </Typography>
-                          {detailSections?.weakTopics?.length ? (
-                            <Stack spacing={1}>
-                              {detailSections.weakTopics.map((topic) => (
-                                <Box key={`${topic.subject || selectedScope?.subjectName}-${topic.topic}`} sx={{ p: 1.25, borderRadius: 2, bgcolor: "error.lighter", border: "1px solid", borderColor: "error.light" }}>
-                                  <Typography fontWeight={700} color="error.main">
-                                    {topic.subject ? `${topic.subject} • ` : ""}{topic.topic}
+                        <Grid container spacing={2}>
+                          {roleMode === "class_teacher" ? (
+                            <>
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Overall Score</Typography>
+                                <Chip 
+                                  label={`${student.overallAverage}%`} 
+                                  color={student.overallAverage >= 75 ? "success" : student.overallAverage < 40 ? "error" : "primary"} 
+                                  size="small" 
+                                  sx={{ fontWeight: 600 }}
+                                />
+                              </Grid>
+                              <Grid item xs={6}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Strong Subjects</Typography>
+                                {student.strongSubjects?.length ? (
+                                  <Typography variant="body2" color="success.main" fontWeight={500}>
+                                    {student.strongSubjects.map(s => s.subject).join(", ")}
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    Score {topic.score}%
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">None</Typography>
+                                )}
+                              </Grid>
+                              <Grid item xs={6}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Weak Subjects</Typography>
+                                {student.weakSubjects?.length ? (
+                                  <Typography variant="body2" color="error.main" fontWeight={500}>
+                                    {student.weakSubjects.map(s => s.subject).join(", ")}
                                   </Typography>
-                                </Box>
-                              ))}
-                            </Stack>
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">None</Typography>
+                                )}
+                              </Grid>
+                            </>
                           ) : (
-                            <Alert severity="success">No weak topics flagged in this view.</Alert>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined" sx={{ borderRadius: 3, height: "100%" }}>
-                        <CardContent>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Strong Areas
-                          </Typography>
-                          {detailSections?.strongTopics?.length ? (
-                            <Stack spacing={1}>
-                              {detailSections.strongTopics.map((topic) => (
-                                <Box key={`${topic.subject || selectedScope?.subjectName}-${topic.topic}`} sx={{ p: 1.25, borderRadius: 2, bgcolor: "success.lighter", border: "1px solid", borderColor: "success.light" }}>
-                                  <Typography fontWeight={700} color="success.main">
-                                    {topic.subject ? `${topic.subject} • ` : ""}{topic.topic}
+                            <>
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Subject Score</Typography>
+                                <Chip 
+                                  label={`${student.subjectSummary?.marks ?? 0}%`} 
+                                  color={student.belowThreshold ? "error" : "primary"} 
+                                  size="small" 
+                                  sx={{ fontWeight: 600 }}
+                                />
+                              </Grid>
+                              <Grid item xs={6}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Strong Topics</Typography>
+                                {details.strongTopics?.length ? (
+                                  <Typography variant="body2" color="success.main" fontWeight={500}>
+                                    {details.strongTopics.map((t, i) => (
+                                      <span key={i}>
+                                        <Box
+                                          component="span"
+                                          sx={{ cursor: "pointer", '&:hover': { textDecoration: 'underline' } }}
+                                          onClick={() => { setSelectedTopicData(t); setSelectedTopicStudentName(student.name); }}
+                                        >
+                                          {t.topic}
+                                        </Box>
+                                        {i < details.strongTopics.length - 1 ? ", " : ""}
+                                      </span>
+                                    ))}
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    Score {topic.score}%
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">None</Typography>
+                                )}
+                              </Grid>
+                              <Grid item xs={6}>
+                                <Typography variant="caption" color="textSecondary" display="block" mb={0.5}>Weak Topics</Typography>
+                                {details.weakTopics?.length ? (
+                                  <Typography variant="body2" color="error.main" fontWeight={500}>
+                                    {details.weakTopics.map((t, i) => (
+                                      <span key={i}>
+                                        <Box
+                                          component="span"
+                                          sx={{ cursor: "pointer", '&:hover': { textDecoration: 'underline' } }}
+                                          onClick={() => { setSelectedTopicData(t); setSelectedTopicStudentName(student.name); }}
+                                        >
+                                          {t.topic}
+                                        </Box>
+                                        {i < details.weakTopics.length - 1 ? ", " : ""}
+                                      </span>
+                                    ))}
                                   </Typography>
-                                </Box>
-                              ))}
-                            </Stack>
-                          ) : (
-                            <Alert severity="info">Strong topic data will appear here when available.</Alert>
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">None</Typography>
+                                )}
+                              </Grid>
+                            </>
                           )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-                </Stack>
+                        </Grid>
+                      </CardContent>
+                    </Card>
+                  );
+                })
               )}
-            </Paper>
-          </Grid>
-        </Grid>
+            </Box>
+          ) : (
+          <TableContainer sx={{ bgcolor: 'white' }}>
+            <Table sx={{ minWidth: 700 }}>
+              <TableHead sx={{ bgcolor: "background.default" }}>
+                <TableRow>
+                  <TableCell>Student Details</TableCell>
+                  <TableCell align="center">Attendance</TableCell>
+                  {roleMode === "class_teacher" ? (
+                    <>
+                      <TableCell align="center">Overall Score</TableCell>
+                      <TableCell>Strong Subjects</TableCell>
+                      <TableCell>Weak Subjects</TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell align="center">Subject Score</TableCell>
+                      <TableCell>Strong Topics</TableCell>
+                      <TableCell>Weak Topics</TableCell>
+                    </>
+                  )}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {visibleStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                      <Alert severity="info" sx={{ display: "inline-flex" }}>No students available for the selected teacher scope.</Alert>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  visibleStudents.map((student) => {
+                    const details = getStudentDetailSections({ roleMode, studentReport: student });
+                    
+                    return (
+                      <TableRow key={student.studentId} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                        <TableCell>
+                          <Stack spacing={0.5}>
+                            <Typography fontWeight={700}>{student.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {student.username} • Class {student.className} • Section {student.sectionName}
+                            </Typography>
+                            {student.badge ? (
+                              <Chip size="small" label={student.badge} color={badgeColorMap[student.badge] || "default"} sx={{ width: "fit-content", fontWeight: 600, mt: 0.5 }} />
+                            ) : null}
+                          </Stack>
+                        </TableCell>
+                        
+                        <TableCell align="center">
+                          <Chip 
+                            label={`${student.attendancePct}%`} 
+                            color={student.attendancePct < 75 ? "warning" : "success"} 
+                            variant={student.attendancePct < 75 ? "filled" : "outlined"} 
+                            size="small" 
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </TableCell>
+
+                        {roleMode === "class_teacher" ? (
+                          <>
+                            <TableCell align="center">
+                              <Chip 
+                                label={`${student.overallAverage}%`} 
+                                color={student.overallAverage >= 75 ? "success" : student.overallAverage < 40 ? "error" : "primary"} 
+                                size="small" 
+                                sx={{ fontWeight: 600 }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {student.strongSubjects?.length ? (
+                                <Typography variant="body2" color="success.main" fontWeight={500}>
+                                  {student.strongSubjects.map(s => s.subject).join(", ")}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">None</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {student.weakSubjects?.length ? (
+                                <Typography variant="body2" color="error.main" fontWeight={500}>
+                                  {student.weakSubjects.map(s => s.subject).join(", ")}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">None</Typography>
+                              )}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell align="center">
+                              <Chip 
+                                label={`${student.subjectSummary?.marks ?? 0}%`} 
+                                color={student.belowThreshold ? "error" : "primary"} 
+                                size="small" 
+                                sx={{ fontWeight: 600 }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {details.strongTopics?.length ? (
+                                <Typography variant="body2" color="success.main" fontWeight={500}>
+                                  {details.strongTopics.map((t, i) => (
+                                    <span key={i}>
+                                      <Box
+                                        component="span"
+                                        sx={{ cursor: "pointer", '&:hover': { textDecoration: 'underline' } }}
+                                        onClick={() => { setSelectedTopicData(t); setSelectedTopicStudentName(student.name); }}
+                                      >
+                                        {t.topic}
+                                      </Box>
+                                      {i < details.strongTopics.length - 1 ? ", " : ""}
+                                    </span>
+                                  ))}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">None</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {details.weakTopics?.length ? (
+                                <Typography variant="body2" color="error.main" fontWeight={500}>
+                                  {details.weakTopics.map((t, i) => (
+                                    <span key={i}>
+                                      <Box
+                                        component="span"
+                                        sx={{ cursor: "pointer", '&:hover': { textDecoration: 'underline' } }}
+                                        onClick={() => { setSelectedTopicData(t); setSelectedTopicStudentName(student.name); }}
+                                      >
+                                        {t.topic}
+                                      </Box>
+                                      {i < details.weakTopics.length - 1 ? ", " : ""}
+                                    </span>
+                                  ))}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">None</Typography>
+                              )}
+                            </TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          )}
+        </Paper>
       </Stack>
+      
+      <TopicDetailDialog
+        open={Boolean(selectedTopicData)}
+        onClose={() => setSelectedTopicData(null)}
+        topicData={selectedTopicData}
+        studentName={selectedTopicStudentName}
+      />
     </Container>
   );
 }

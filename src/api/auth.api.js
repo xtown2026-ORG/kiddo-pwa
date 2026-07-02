@@ -204,7 +204,17 @@ export function validateToken(token) {
   try {
     if (!token) return false;
     
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    let base64Url = token.split('.')[1];
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let pad = base64.length % 4;
+    if (pad) {
+      if (pad === 1) {
+        throw new Error('InvalidLengthError: Input base64url string is the wrong length to determine padding');
+      }
+      base64 += new Array(5 - pad).join('=');
+    }
+    
+    const payload = JSON.parse(atob(base64));
     const currentTime = Date.now() / 1000;
     
     return payload.exp > currentTime;
