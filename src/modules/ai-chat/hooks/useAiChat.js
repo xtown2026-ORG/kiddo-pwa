@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  askAiFollowup,
   askAiImageQuestion,
   askAiQuestion,
   getAiChatConversation,
@@ -388,6 +387,7 @@ export function useAiChat({ classLevel, userId }) {
         ? preferredLanguage
         : null;
     const selectedImage = options?.image || null;
+    const subject = options?.subject ?? null;
 
     const userMsg = {
       id: createId("msg"),
@@ -411,10 +411,12 @@ export function useAiChat({ classLevel, userId }) {
         ? await askAiImageQuestion({
             image: selectedImage,
             question: text,
+            subject,
           })
         : await askAiQuestion(
             {
               question: text,
+              subject,
               classLevel,
               language: language || undefined,
               preferredLanguage: language || undefined,
@@ -433,13 +435,6 @@ export function useAiChat({ classLevel, userId }) {
         id: createId("msg"),
         role: "ai",
         text: String(answerText),
-        metadata: {
-          followupSuggestions: Array.isArray(res?.data?.followupSuggestions)
-            ? res.data.followupSuggestions
-            : Array.isArray(res?.followupSuggestions)
-            ? res.followupSuggestions
-            : [],
-        },
         timestamp: new Date().toISOString(),
       };
 
@@ -477,93 +472,6 @@ export function useAiChat({ classLevel, userId }) {
     }
   }
 
-  async function sendFollowup({ label, originalQuestion, previousAnswer, followupType }) {
-    if (!originalQuestion || !previousAnswer || !followupType) return null;
-
-    const userMsg = {
-      id: createId("msg"),
-      role: "user",
-      text: label || "Follow-up",
-      metadata: {
-        isFollowupAction: true,
-        followupType,
-        originalQuestion,
-        previousAnswer,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => {
-      const next = [...prev, userMsg];
-      saveConversation(next);
-      return next;
-    });
-    setLoading(true);
-
-    try {
-      const res = await askAiFollowup({
-        originalQuestion,
-        previousAnswer,
-        followupType,
-      });
-
-      const data = res?.data || res || {};
-      const answerText =
-        data?.answer ||
-        "AI assistant is temporarily unavailable. Please try again.";
-
-      const aiMsg = {
-        id: createId("msg"),
-        role: "ai",
-        text: String(answerText),
-        metadata: {
-          followupType,
-          imageUrl: data?.imageUrl || null,
-          imageDataUrl: data?.imageDataUrl || null,
-          followupSuggestions: Array.isArray(data?.followupSuggestions)
-            ? data.followupSuggestions
-            : [],
-          source: data?.source || "ai-followup",
-          originalQuestion,
-          previousAnswer,
-        },
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => {
-        const next = [...prev, aiMsg];
-        saveConversation(next);
-        return next;
-      });
-
-      return aiMsg;
-    } catch (error) {
-      const aiMsg = {
-        id: createId("msg"),
-        role: "ai",
-        text: "Let's continue with a short, clear explanation in a moment. Please try again.",
-        metadata: {
-          followupType,
-          followupSuggestions: [],
-          source: "ai-followup",
-          originalQuestion,
-          previousAnswer,
-        },
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => {
-        const next = [...prev, aiMsg];
-        saveConversation(next);
-        return next;
-      });
-
-      return aiMsg;
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return {
     messages,
     conversations,
@@ -573,7 +481,6 @@ export function useAiChat({ classLevel, userId }) {
     historyHasMore,
     historyQuery,
     sendMessage,
-    sendFollowup,
     startNewChat: () => {
       setMessages([]);
       setActiveConversationId(null);

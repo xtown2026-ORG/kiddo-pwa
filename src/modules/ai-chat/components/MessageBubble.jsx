@@ -78,7 +78,7 @@ export default function MessageBubble({ message, userAvatar }) {
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
             <AiEducationalImage
               src={aiImageUrl}
-              alt={message?.metadata?.followupType === "picture" ? "Educational explanation" : "AI generated visual"}
+              alt="AI generated visual"
             />
             {(message.text || message.content) && (
               <Typography

@@ -1,10 +1,12 @@
-import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button, TextField, InputAdornment, Chip } from "@mui/material";
+import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button, TextField, InputAdornment } from "@mui/material";
 import { Add, Close, SmartToy, VolumeUp, Mic, Menu as MenuIcon, ChatBubbleOutline, Search } from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAiChat } from "../hooks/useAiChat";
+import { getRelatedQuestions } from "../api/relatedQuestions.api";
 import ChatList from "../components/ChatList";
 import ChatInput from "../components/ChatInput";
+import MessageBubble from "../components/MessageBubble";
 import { useAuth } from "../../../auth/AuthProvider";
 import deepListeningClip from "../../../assets/gif/deep-listening.mp4";
 import deepThinkingClip from "../../../assets/gif/deep-thinking.mp4";
@@ -16,91 +18,23 @@ import teachingClip from "../../../assets/gif/teaching.mp4";
 import thinkingClip from "../../../assets/gif/thinking.mp4";
 
 const QUIZ_REDIRECT_THRESHOLD = 30;
-const CHAT_INPUT_DOCK_HEIGHT = 96;
-const CHAT_INPUT_DOCK_EXPANDED_HEIGHT = 220;
+const SUBJECTS = ["Maths", "Physics", "Chemistry"];
+const GEMINI_SOLVER_SUBJECTS = new Set(["maths", "physics", "chemistry"]);
+const CHAT_INPUT_DOCK_HEIGHT = 138;
+const CHAT_INPUT_DOCK_EXPANDED_HEIGHT = 262;
 const CHAT_FOOTER_SAFE_GAP = 28;
-const DEMO_FOLLOWUP_SUGGESTIONS = [
-  { label: "Explain with Example", followupType: "example", isVisual: false },
-  { label: "Step by Step", followupType: "step_by_step", isVisual: false },
-  { label: "Explain Picture", followupType: "picture", isVisual: true },
-  { label: "Short Summary", followupType: "short_summary", isVisual: false },
-];
 
-function normalizeWhitespace(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
+function normalizeRelatedQuestions(response) {
+  const data = response?.data?.data ?? response?.data ?? response;
+  const candidates = Array.isArray(data)
+    ? data
+    : data?.relatedQuestions ?? data?.related_questions ?? data?.questions ?? [];
 
-function normalizeSuggestion(item, fallbackQuestion, fallbackAnswer) {
-  if (!item?.label || !item?.followupType) return null;
-
-  return {
-    label: item.label,
-    followupType: item.followupType,
-    isVisual: item.followupType === "picture",
-    originalQuestion: item.originalQuestion || fallbackQuestion,
-    previousAnswer: item.previousAnswer || fallbackAnswer,
-  };
-}
-
-function isEligibleFollowupTarget(message) {
-  if (message?.role !== "ai") return false;
-  if (message?.metadata?.source === "ai-followup") return true;
-  return Array.isArray(message?.metadata?.followupSuggestions) && message.metadata.followupSuggestions.length > 0;
-}
-
-function getFollowupContext(messages = [], aiIndex = -1) {
-  if (aiIndex < 0 || !messages[aiIndex] || messages[aiIndex]?.role !== "ai") return null;
-
-  const aiMessage = messages[aiIndex];
-  const previousAnswer = normalizeWhitespace(
-    aiMessage?.metadata?.previousAnswer || aiMessage.text || aiMessage.content || ""
-  );
-  if (!previousAnswer) return null;
-
-  const directOriginalQuestion = normalizeWhitespace(aiMessage?.metadata?.originalQuestion || "");
-  if (directOriginalQuestion) {
-    const serverSuggestions = Array.isArray(aiMessage?.metadata?.followupSuggestions)
-      ? aiMessage.metadata.followupSuggestions
-      : [];
-    const suggestions = (serverSuggestions.length ? serverSuggestions : DEMO_FOLLOWUP_SUGGESTIONS)
-      .map((item) => normalizeSuggestion(item, directOriginalQuestion, previousAnswer))
+  return [...new Set(
+    (Array.isArray(candidates) ? candidates : [])
+      .map((item) => String(item?.question ?? item ?? "").trim())
       .filter(Boolean)
-      .slice(0, 4);
-
-    return {
-      aiIndex,
-      originalQuestion: directOriginalQuestion,
-      previousAnswer,
-      suggestions,
-    };
-  }
-
-  for (let index = aiIndex - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.role !== "user") continue;
-
-    const originalQuestion = normalizeWhitespace(
-      message?.metadata?.originalQuestion || message.text
-    );
-    if (!originalQuestion) continue;
-
-    const serverSuggestions = Array.isArray(aiMessage?.metadata?.followupSuggestions)
-      ? aiMessage.metadata.followupSuggestions
-      : [];
-    const suggestions = (serverSuggestions.length ? serverSuggestions : DEMO_FOLLOWUP_SUGGESTIONS)
-      .map((item) => normalizeSuggestion(item, originalQuestion, previousAnswer))
-      .filter(Boolean)
-      .slice(0, 4);
-
-    return {
-      aiIndex,
-      originalQuestion,
-      previousAnswer,
-      suggestions,
-    };
-  }
-
-  return null;
+  )].slice(0, 4);
 }
 
 function deriveQuizTopic(messages = []) {
@@ -138,10 +72,13 @@ export default function AiChatPage() {
   const [introClipIndex, setIntroClipIndex] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState(null);
+  const [pendingRelatedNavigation, setPendingRelatedNavigation] = useState(null);
   const messagesScrollRef = useRef(null);
   const previousUserCountRef = useRef(0);
   const imageInputRef = useRef(null);
   const createdImageUrlsRef = useRef([]);
+  const relatedRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const classLevel = user?.class_level ?? "general";
@@ -157,7 +94,6 @@ export default function AiChatPage() {
     historyHasMore,
     historyQuery,
     sendMessage,
-    sendFollowup,
     loadConversation,
     startNewChat,
     loadMoreConversations,
@@ -171,49 +107,87 @@ export default function AiChatPage() {
     () => messages.filter((message) => message?.role === "user").length,
     [messages]
   );
-  const latestFollowupContext = useMemo(() => {
-    if (loading) return null;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]?.role !== "ai") continue;
-      const context = getFollowupContext(messages, index);
-      if (context?.suggestions?.length) return context;
-      return null;
-    }
-    return null;
-  }, [loading, messages]);
   const chatInputDockHeight =
     selectedImages.length > 0
       ? CHAT_INPUT_DOCK_EXPANDED_HEIGHT
       : CHAT_INPUT_DOCK_HEIGHT;
   const messagesBottomPadding = `calc(${chatInputDockHeight + CHAT_FOOTER_SAFE_GAP}px + env(safe-area-inset-bottom))`;
+  const loadingRelatedQuestions = pendingRelatedNavigation?.loading === true;
+  const hasPendingRelatedNavigation = Boolean(pendingRelatedNavigation);
 
   async function handleSendMessage(text) {
     if (showIntro) setShowIntro(false);
     const selectedImage = selectedImages[0] || null;
-    const reply = await sendMessage(
-      text,
-      null,
-      selectedImage
-        ? {
-            image: selectedImage.file,
-            imagePreviewUrl: selectedImage.previewUrl,
-            imageName: selectedImage.name,
-          }
-        : {}
-    );
-    clearSelectedImages({ revoke: false });
-    return reply;
+    const subjectForRequest = selectedSubject;
+    try {
+      return await sendMessage(text, null, {
+        subject: subjectForRequest,
+        ...(selectedImage
+          ? {
+              image: selectedImage.file,
+              imagePreviewUrl: selectedImage.previewUrl,
+              imageName: selectedImage.name,
+            }
+          : {}),
+      });
+    } finally {
+      setSelectedSubject(null);
+      clearSelectedImages({ revoke: false });
+    }
   }
 
-  async function handleFollowUpClick(suggestion) {
-    if (!suggestion || loading) return;
+  async function handleQuestionNavigation(text) {
+    if (!text || loadingRelatedQuestions) return;
 
-    await sendFollowup({
-      label: suggestion.label,
-      originalQuestion: suggestion.originalQuestion,
-      previousAnswer: suggestion.previousAnswer,
-      followupType: suggestion.followupType,
+    const isGeminiSolverRequest = GEMINI_SOLVER_SUBJECTS.has(
+      String(selectedSubject || "").trim().toLowerCase()
+    );
+    if (isGeminiSolverRequest) {
+      setPendingRelatedNavigation(null);
+      return handleSendMessage(text);
+    }
+
+    const requestId = relatedRequestIdRef.current + 1;
+    const messageId = `related-nav-${Date.now()}-${requestId}`;
+    relatedRequestIdRef.current = requestId;
+    setShowIntro(false);
+    setPendingRelatedNavigation({
+      messageId,
+      question: text,
+      questions: [],
+      loading: true,
+      imagePreviewUrl: selectedImages[0]?.previewUrl,
+      imageName: selectedImages[0]?.name,
     });
+
+    try {
+      const response = await getRelatedQuestions(text);
+      if (requestId !== relatedRequestIdRef.current) return;
+      const questions = normalizeRelatedQuestions(response);
+      if (questions.length !== 4) throw new Error("Related questions response must contain four questions.");
+      setPendingRelatedNavigation((current) =>
+        current?.messageId === messageId
+          ? { ...current, questions, loading: false }
+          : current
+      );
+    } catch {
+      if (requestId !== relatedRequestIdRef.current) return;
+      setPendingRelatedNavigation(null);
+      return handleSendMessage(text);
+    }
+  }
+
+  async function handleRelatedQuestionSelect(messageId, question) {
+    if (!question || loading || pendingRelatedNavigation?.messageId !== messageId) return;
+    setPendingRelatedNavigation(null);
+    await handleSendMessage(question);
+  }
+
+  async function handleNoneOfAbove(messageId) {
+    if (loading || pendingRelatedNavigation?.messageId !== messageId) return;
+    const originalQuestion = pendingRelatedNavigation.question;
+    setPendingRelatedNavigation(null);
+    await handleSendMessage(originalQuestion);
   }
 
   function handleImageUpload(event) {
@@ -274,7 +248,7 @@ export default function AiChatPage() {
       scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
     });
     return () => cancelAnimationFrame(id);
-  }, [messages, loading]);
+  }, [messages, loading, pendingRelatedNavigation]);
 
   useEffect(() => {
     const previousCount = previousUserCountRef.current;
@@ -343,6 +317,8 @@ export default function AiChatPage() {
           <Button
             size="small"
             onClick={() => {
+              relatedRequestIdRef.current += 1;
+              setPendingRelatedNavigation(null);
               startNewChat();
               setIsHistoryOpen(false);
             }}
@@ -378,6 +354,8 @@ export default function AiChatPage() {
               <ListItem key={conv.id} disablePadding>
                 <ListItemButton
                   onClick={() => {
+                    relatedRequestIdRef.current += 1;
+                    setPendingRelatedNavigation(null);
                     loadConversation(conv.id);
                     setShowIntro(false);
                     setIsHistoryOpen(false);
@@ -469,61 +447,57 @@ export default function AiChatPage() {
           <ChatList
             messages={messages}
             userAvatar={user?.avatar_url}
-            renderAfterMessage={(message, index) => {
-              if (!latestFollowupContext?.suggestions?.length) return null;
-              if (index !== latestFollowupContext.aiIndex) return null;
-              if (!isEligibleFollowupTarget(message)) return null;
-
-              return (
-                <Box
-                  sx={{
-                    ml: { xs: 0, sm: 5.75 },
-                    mb: 3.5,
-                    mt: -0.5,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 0.75,
-                    alignItems: "center",
-                    maxWidth: { xs: "100%", sm: "calc(100% - 56px)" },
-                    pr: 0.5,
-                    overflow: "hidden",
-                  }}
-                >
-                  {latestFollowupContext.suggestions.map((suggestion, suggestionIndex) => (
-                    <Chip
-                      key={`${suggestion.followupType}-${suggestion.label}-${suggestionIndex}`}
-                      label={suggestion.label}
-                      clickable
-                      disabled={loading}
-                      onClick={() => handleFollowUpClick(suggestion)}
-                      variant="outlined"
-                      size="small"
-                      sx={{
-                        height: 32,
-                        borderRadius: "999px",
-                        px: 0.4,
-                        fontWeight: 600,
-                        fontSize: 13,
-                        maxWidth: "100%",
-                        color: "#1f2937",
-                        bgcolor: "rgba(255,255,255,0.94)",
-                        borderColor: suggestion.isVisual ? "primary.main" : "rgba(15, 23, 42, 0.14)",
-                        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-                        "& .MuiChip-label": {
-                          px: 1.1,
-                          whiteSpace: "normal",
-                        },
-                        "&:hover": {
-                          bgcolor: "#ffffff",
-                          borderColor: suggestion.isVisual ? "primary.main" : "rgba(15, 23, 42, 0.24)",
-                        },
-                      }}
-                    />
-                  ))}
-                </Box>
-              );
-            }}
           />
+
+          {pendingRelatedNavigation && (
+            <Box sx={{ px: 2, minWidth: 0 }}>
+              <MessageBubble
+                message={{
+                  id: pendingRelatedNavigation.messageId,
+                  role: "user",
+                  text: pendingRelatedNavigation.question,
+                  imagePreviewUrl: pendingRelatedNavigation.imagePreviewUrl,
+                  imageName: pendingRelatedNavigation.imageName,
+                }}
+                userAvatar={user?.avatar_url}
+              />
+
+              {pendingRelatedNavigation.loading ? (
+                <Typography sx={{ ml: { xs: 0, sm: 5.75 }, mb: 2 }} color="text.secondary" variant="body2">
+                  Finding related questions…
+                </Typography>
+              ) : (
+                <Box
+                  component="nav"
+                  aria-label={`Related questions for ${pendingRelatedNavigation.question}`}
+                  sx={{ ml: { xs: 0, sm: 5.75 }, mb: 2, display: "flex", flexDirection: "column", gap: 1 }}
+                >
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    Choose a related question
+                  </Typography>
+                  {pendingRelatedNavigation.questions.map((question) => (
+                    <Button
+                      key={question}
+                      variant="outlined"
+                      disabled={loading}
+                      onClick={() => handleRelatedQuestionSelect(pendingRelatedNavigation.messageId, question)}
+                      sx={{ justifyContent: "flex-start", textAlign: "left", textTransform: "none" }}
+                    >
+                      {question}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="outlined"
+                    disabled={loading}
+                    onClick={() => handleNoneOfAbove(pendingRelatedNavigation.messageId)}
+                    sx={{ justifyContent: "flex-start", textAlign: "left", textTransform: "none" }}
+                  >
+                    None of the above
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
 
           {loading && (
             <Box sx={{ p: 2, display: "flex", gap: 1.5, alignItems: "center" }}>
@@ -589,6 +563,28 @@ export default function AiChatPage() {
             flexDirection: "column",
           }}
         >
+        <Box
+          role="group"
+          aria-label="Select a subject for this question"
+          sx={{ display: "flex", gap: 1, mb: 1, px: 1, flexWrap: "wrap" }}
+        >
+          {SUBJECTS.map((subject) => {
+            const isSelected = selectedSubject === subject;
+            return (
+              <Button
+                key={subject}
+                size="small"
+                variant={isSelected ? "contained" : "outlined"}
+                aria-pressed={isSelected}
+                disabled={loading || loadingRelatedQuestions}
+                onClick={() => setSelectedSubject(subject)}
+                sx={{ borderRadius: 999, textTransform: "none", minWidth: 88 }}
+              >
+                {subject}
+              </Button>
+            );
+          })}
+        </Box>
         {selectedImages.length > 0 && (
           <Box
             sx={{
@@ -627,6 +623,7 @@ export default function AiChatPage() {
                 />
                 <IconButton
                   size="small"
+                  disabled={hasPendingRelatedNavigation}
                   aria-label="Remove image"
                   onClick={() => removeSelectedImage(image.id)}
                   sx={{
@@ -650,8 +647,8 @@ export default function AiChatPage() {
           </Box>
         )}
         <ChatInput
-          onSend={handleSendMessage}
-          disabled={loading}
+          onSend={handleQuestionNavigation}
+          disabled={loading || hasPendingRelatedNavigation}
           placeholder="Type a question..."
           placeholderEndAdornment={<Mic fontSize="small" />}
           placeholderEndAriaLabel="Voice input"
@@ -667,6 +664,7 @@ export default function AiChatPage() {
               <IconButton
                 size="small"
                 color="primary"
+                disabled={loading || hasPendingRelatedNavigation}
                 aria-label="Upload image"
                 onClick={(event) => {
                   event.preventDefault();
@@ -682,6 +680,7 @@ export default function AiChatPage() {
               <IconButton
                 size="small"
                 color="primary"
+                disabled={loading || hasPendingRelatedNavigation}
                 aria-label="Open voice chat"
                 onClick={(event) => {
                   event.preventDefault();
