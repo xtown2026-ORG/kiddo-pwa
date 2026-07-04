@@ -64,9 +64,8 @@ export default function ProfilePage() {
     try {
       await saveProfile(data);
       setSaveSuccess(true);
-      const target = basePath ? `${basePath}/dashboard` : "/";
       setTimeout(() => {
-        navigate(target, { replace: true });
+        navigate("/approval-pending", { replace: true });
       }, 800);
     } catch (err) {
       // Errors are handled by the hook and shown via error state.

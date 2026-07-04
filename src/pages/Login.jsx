@@ -12,13 +12,14 @@ import {
 import { AutoAwesomeRounded } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import LoginForm from "../modules/login/LoginForm";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import appIcon from "../assets/app-icon-192.png";
+import { ThemeModeContext } from "../theme/ThemeProvider";
 
 export default function Login() {
   const { user, loading, logout } = useAuth();
-  const theme = useTheme();
-  const isDark = theme.palette.mode === "dark";
+  const { mode, platformName, platformLogo } = useContext(ThemeModeContext);
+  const isDark = mode === "dark";
   const [blocked, setBlocked] = useState(false);
   const hasKnownUnapprovedStatus = false;
 
@@ -176,11 +177,11 @@ export default function Login() {
                       : "0 14px 32px rgba(16,185,129,0.35)",
                   }}
                 >
-                  <Avatar
-                    src={appIcon}
-                    alt="kiddoshadow logo"
-                    variant="rounded"
-                    sx={{ width: 40, height: 40 }}
+                  <Box
+                    component="img"
+                    src={`${appIcon}?v=${Date.now()}`}
+                    alt={`${platformName} logo`}
+                    sx={{ width: 40, height: 40, borderRadius: 1.5, objectFit: 'contain' }}
                   />
                 </Box>
                 <Box>
@@ -192,7 +193,7 @@ export default function Login() {
                       color: "text.primary",
                     }}
                   >
-                    kiddoshadow
+                    {platformName}
                   </Typography>
                 </Box>
               </Stack>
