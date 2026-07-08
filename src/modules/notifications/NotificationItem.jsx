@@ -7,12 +7,14 @@ import {
   Box,
 } from "@mui/material";
 import { useAuth } from "../../auth/AuthProvider";
+import { useNavigate } from "react-router-dom";
 
 export default function NotificationItem({
   item,
   onAcknowledge,
 }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isMine = user && String(item.sender_user_id) === String(user.id);
   const createdAt = item.created_at
     ? new Date(item.created_at).toLocaleString()
@@ -32,8 +34,21 @@ export default function NotificationItem({
       ? "S"
       : senderName?.[0]?.toUpperCase() || "U";
 
+  const handleNotificationClick = () => {
+    if (item.title === "Profile Update Request") {
+      navigate(`/teacher/approvals?user_id=${item.sender_user_id}`);
+    }
+  };
+
   return (
-    <Paper sx={{ p: 2 }}>
+    <Paper 
+      sx={{ 
+        p: 2, 
+        cursor: item.title === "Profile Update Request" ? "pointer" : "default",
+        '&:hover': item.title === "Profile Update Request" ? { bgcolor: 'action.hover' } : {}
+      }}
+      onClick={handleNotificationClick}
+    >
       <Stack spacing={1}>
         <Stack direction="row" spacing={1.2} alignItems="center">
           <Avatar
@@ -81,7 +96,10 @@ export default function NotificationItem({
           {!item.is_acknowledged && (
             <Button
               size="small"
-              onClick={() => onAcknowledge(item.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAcknowledge(item.id);
+              }}
             >
               Mark as Read
             </Button>

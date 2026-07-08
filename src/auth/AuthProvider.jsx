@@ -119,9 +119,9 @@ export function AuthProvider({ children }) {
               prev?.section_name,
             avatar_url: avatarUrl || prev?.avatar_url || "",
             first_login:
-              typeof normalized?.first_login === "boolean"
-                ? normalized.first_login
-                : prev?.first_login,
+              normalized?.first_login === true || normalized?.user?.first_login === true
+                ? true
+                : false,
             approval_status: normalized?.approval_status ?? prev?.approval_status,
           }));
         }

@@ -41,11 +41,7 @@ export default function RequireApproval({ children }) {
         const normalized = data?.user ? { ...data, ...data.user } : data;
         const approvalStatus = normalized?.approval_status || null;
         const firstLogin =
-          typeof data?.first_login === "boolean"
-            ? data.first_login
-            : typeof data?.user?.first_login === "boolean"
-              ? data.user.first_login
-              : null;
+          data?.first_login === true || data?.user?.first_login === true;
 
         if (isMounted) {
           setProfileGate({
@@ -83,7 +79,10 @@ export default function RequireApproval({ children }) {
   if (loading || checking) return null;
   if (!shouldCheck) return children;
 
-  if (user?.role !== "parent" && profileGate.firstLogin === true && !isOnCompletionPath) {
+  const currentFirstLogin = user?.first_login ?? profileGate.firstLogin;
+  const currentApprovalStatus = user?.approval_status ?? profileGate.approvalStatus;
+
+  if (user?.role !== "parent" && currentFirstLogin === true && !isOnCompletionPath) {
     return (
       <Navigate to={completionPath} state={{ from: location }} replace />
     );
@@ -94,10 +93,11 @@ export default function RequireApproval({ children }) {
   }
 
   // Only redirect if we have a confirmed non-approved status (not null/undefined which means unknown)
-  if (profileGate.approvalStatus !== null && profileGate.approvalStatus !== "approved") {
+  if (currentApprovalStatus !== null && currentApprovalStatus !== "approved") {
     const isApprovalRoute = location.pathname.startsWith("/approval-pending");
+    const isProfileUpdatePending = currentFirstLogin !== true && currentApprovalStatus === "pending";
 
-    if (!isApprovalRoute) {
+    if (!isApprovalRoute && !isProfileUpdatePending) {
       return (
         <Navigate to="/approval-pending" state={{ from: location }} replace />
       );

@@ -18,8 +18,8 @@ import {
     Box,
     Divider,
 } from "@mui/material";
-import { Add, Delete, ArrowBack } from "@mui/icons-material";
-import { getSectionAssignments, saveTimetable, getSectionTimetable } from "./teacherTimetable.api";
+import { Add, Delete, ArrowBack, SwapVert, CheckCircle, Cancel } from "@mui/icons-material";
+import { getSectionAssignments, saveTimetable, getSectionTimetable, getSubstituteTeachers } from "./teacherTimetable.api";
 
 export default function ManageTimetableDialog({ open, onClose, onSuccess, classTeacherSections = [], teacherAssignments = [], teacherTimetable = {}, defaultDay = "monday" }) {
     const [loading, setLoading] = useState(false);
@@ -34,6 +34,12 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
         { start_time: "09:00", end_time: "10:00", teacher_assignment_id: "", title: "", is_break: false }
     ]);
     const [hiddenEntries, setHiddenEntries] = useState([]);
+
+    // Substitute Teacher Modal State
+    const [substituteModalOpen, setSubstituteModalOpen] = useState(false);
+    const [substituteTeachers, setSubstituteTeachers] = useState([]);
+    const [loadingSubstitute, setLoadingSubstitute] = useState(false);
+    const [activePeriodIndex, setActivePeriodIndex] = useState(null);
 
     const classOptions = useMemo(() => {
         return classTeacherSections.map((s) => ({
@@ -144,6 +150,42 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
         setEntries(newEntries);
     };
 
+    const handleOpenSubstituteModal = async (index) => {
+        const entry = entries[index];
+        if (!entry.start_time || !entry.end_time) {
+            setError("Please select start and end time before switching teacher.");
+            return;
+        }
+
+        const [, sectionId] = classSection.split(",");
+        setActivePeriodIndex(index);
+        setSubstituteModalOpen(true);
+        setLoadingSubstitute(true);
+
+        try {
+            const res = await getSubstituteTeachers(sectionId, dayOfWeek, entry.start_time, entry.end_time);
+            setSubstituteTeachers(res?.data?.data ?? res?.data ?? []);
+        } catch (err) {
+            console.error("Failed to load substitute teachers:", err);
+            setError("Failed to load available teachers.");
+        } finally {
+            setLoadingSubstitute(false);
+        }
+    };
+
+    const handleSelectSubstitute = (teacherAssignmentId) => {
+        handleEntryChange(activePeriodIndex, "teacher_assignment_id", teacherAssignmentId);
+        
+        // Also ensure this assignment is in sectionAssignments so the dropdown displays correctly
+        const selected = substituteTeachers.find(t => t.id === teacherAssignmentId);
+        if (selected && !sectionAssignments.some(a => a.id === teacherAssignmentId)) {
+            setSectionAssignments(prev => [...prev, selected]);
+        }
+        
+        setSubstituteModalOpen(false);
+        setActivePeriodIndex(null);
+    };
+
     const handleSubmit = async () => {
         if (!classSection) {
             setError("Please select a class & section");
@@ -194,6 +236,7 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
     };
 
     return (
+        <>
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                 <IconButton onClick={onClose} edge="start" sx={{ mr: 1 }}>
@@ -297,58 +340,68 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
                                 />
                             </Stack>
 
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Subject & Teacher Assignment</InputLabel>
-                                <Select
-                                    value={entry.teacher_assignment_id || ""}
-                                    onChange={(e) => handleEntryChange(index, "teacher_assignment_id", e.target.value)}
-                                    label="Subject & Teacher Assignment"
+                            <Stack direction="row" spacing={1} alignItems="center">
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Subject & Teacher Assignment</InputLabel>
+                                    <Select
+                                        value={entry.teacher_assignment_id || ""}
+                                        onChange={(e) => handleEntryChange(index, "teacher_assignment_id", e.target.value)}
+                                        label="Subject & Teacher Assignment"
+                                    >
+                                        <MenuItem value="">
+                                            <em>Select assignment</em>
+                                        </MenuItem>
+                                        {sectionAssignments.map((a) => {
+                                            // Availability check based on logged-in teacher's timetable
+                                            const isMyAssignment = teacherAssignments.some(ta => String(ta.id) === String(a.id));
+                                            let isBusy = false;
+                                            
+                                            if (isMyAssignment && teacherTimetable && teacherTimetable[dayOfWeek]) {
+                                                const daySchedule = teacherTimetable[dayOfWeek];
+                                                isBusy = daySchedule.some(p => {
+                                                    if (p.is_break) return false;
+                                                    const currentClassId = classSection.split(",")[0];
+                                                    const currentSectionId = classSection.split(",")[1];
+                                                    if (String(p.class_id) === String(currentClassId) && String(p.section_id) === String(currentSectionId)) {
+                                                        return false; // same class/section slot
+                                                    }
+                                                    
+                                                    const pStart = p.start_time?.slice(0, 5);
+                                                    const pEnd = p.end_time?.slice(0, 5);
+                                                    const eStart = entry.start_time;
+                                                    const eEnd = entry.end_time;
+                                                    
+                                                    if (!eStart || !eEnd || !pStart || !pEnd) return false;
+                                                    
+                                                    return pStart < eEnd && pEnd > eStart;
+                                                });
+                                            }
+
+                                            if (isBusy) return null; // Prevent double booking
+
+                                            const subjectName = a.Subject?.name || a.subject?.name || "Subject";
+                                            const teacherName =
+                                                a.Teacher?.User?.name ||
+                                                a.teacher?.user?.name ||
+                                                a.teacher?.User?.name ||
+                                                "Teacher";
+                                            return (
+                                                <MenuItem key={a.id} value={a.id}>
+                                                    {subjectName} - {teacherName}
+                                                </MenuItem>
+                                            );
+                                        })}
+                                    </Select>
+                                </FormControl>
+                                <IconButton 
+                                    color="primary" 
+                                    onClick={() => handleOpenSubstituteModal(index)}
+                                    title="Switch Teacher"
+                                    sx={{ bgcolor: 'action.hover' }}
                                 >
-                                    <MenuItem value="">
-                                        <em>Select assignment</em>
-                                    </MenuItem>
-                                    {sectionAssignments.map((a) => {
-                                        // Availability check based on logged-in teacher's timetable
-                                        const isMyAssignment = teacherAssignments.some(ta => String(ta.id) === String(a.id));
-                                        let isBusy = false;
-                                        
-                                        if (isMyAssignment && teacherTimetable && teacherTimetable[dayOfWeek]) {
-                                            const daySchedule = teacherTimetable[dayOfWeek];
-                                            isBusy = daySchedule.some(p => {
-                                                if (p.is_break) return false;
-                                                const currentClassId = classSection.split(",")[0];
-                                                const currentSectionId = classSection.split(",")[1];
-                                                if (String(p.class_id) === String(currentClassId) && String(p.section_id) === String(currentSectionId)) {
-                                                    return false; // same class/section slot
-                                                }
-                                                
-                                                const pStart = p.start_time?.slice(0, 5);
-                                                const pEnd = p.end_time?.slice(0, 5);
-                                                const eStart = entry.start_time;
-                                                const eEnd = entry.end_time;
-                                                
-                                                if (!eStart || !eEnd || !pStart || !pEnd) return false;
-                                                
-                                                return pStart < eEnd && pEnd > eStart;
-                                            });
-                                        }
-
-                                        if (isBusy) return null; // Prevent double booking
-
-                                        const subjectName = a.Subject?.name || a.subject?.name || "Subject";
-                                        const teacherName =
-                                            a.Teacher?.User?.name ||
-                                            a.teacher?.user?.name ||
-                                            a.teacher?.User?.name ||
-                                            "Teacher";
-                                        return (
-                                            <MenuItem key={a.id} value={a.id}>
-                                                {subjectName} - {teacherName}
-                                            </MenuItem>
-                                        );
-                                    })}
-                                </Select>
-                            </FormControl>
+                                    <SwapVert />
+                                </IconButton>
+                            </Stack>
                         </Stack>
                     </Box>
                 ))}
@@ -374,5 +427,75 @@ export default function ManageTimetableDialog({ open, onClose, onSuccess, classT
                 </Button>
             </DialogActions>
         </Dialog>
+
+        {/* Substitute Teacher Selection Modal */}
+        <Dialog 
+            open={substituteModalOpen} 
+            onClose={() => setSubstituteModalOpen(false)}
+            maxWidth="sm"
+            fullWidth
+        >
+            <DialogTitle sx={{ fontWeight: 600, borderBottom: '1px solid', borderColor: 'divider' }}>
+                Available Teachers
+            </DialogTitle>
+            <DialogContent sx={{ p: 0 }}>
+                {loadingSubstitute ? (
+                    <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <Typography color="text.secondary">Loading teachers...</Typography>
+                    </Box>
+                ) : substituteTeachers.length === 0 ? (
+                    <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <Typography color="text.secondary">No teachers are available for this period.</Typography>
+                    </Box>
+                ) : (
+                    <Stack divider={<Divider />} sx={{ mt: 1 }}>
+                        {substituteTeachers.map(teacher => {
+                            const isBusy = teacher.is_busy;
+                            const subjectName = teacher.Subject?.name || teacher.subject?.name || "Subject";
+                            const teacherName = teacher.Teacher?.User?.name || teacher.teacher?.user?.name || teacher.teacher?.User?.name || "Teacher";
+                            
+                            return (
+                                <Box 
+                                    key={teacher.id}
+                                    sx={{ 
+                                        p: 2, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'space-between',
+                                        bgcolor: isBusy ? 'action.hover' : 'transparent',
+                                        opacity: isBusy ? 0.7 : 1,
+                                        cursor: isBusy ? 'not-allowed' : 'pointer',
+                                        '&:hover': {
+                                            bgcolor: isBusy ? 'action.hover' : 'action.selected'
+                                        }
+                                    }}
+                                    onClick={() => !isBusy && handleSelectSubstitute(teacher.id)}
+                                >
+                                    <Box>
+                                        <Typography variant="subtitle1" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            {isBusy ? <Cancel color="error" fontSize="small" /> : <CheckCircle color="success" fontSize="small" />}
+                                            {teacherName}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {subjectName} • Status: {isBusy ? "Busy" : "Available"}
+                                        </Typography>
+                                        {isBusy && teacher.busy_details && (
+                                            <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                                                Currently Handling: Class {teacher.busy_details.class_name} {teacher.busy_details.section_name} <br/>
+                                                Time: {teacher.busy_details.start_time?.slice(0, 5)} - {teacher.busy_details.end_time?.slice(0, 5)}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                </Box>
+                            );
+                        })}
+                    </Stack>
+                )}
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}>
+                <Button onClick={() => setSubstituteModalOpen(false)}>Cancel</Button>
+            </DialogActions>
+        </Dialog>
+        </>
     );
 }

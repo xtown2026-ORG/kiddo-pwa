@@ -14,7 +14,7 @@ import {
 import ProfileForm from "./ProfileForm";
 import { useProfile } from "./useProfile";
 import { useProfileCompletion } from "../../auth/useProfileCompletion"; // Imported
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { changePasswordApi } from "../../api/auth.api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
@@ -60,13 +60,26 @@ export default function ProfilePage() {
           ? "/parent"
           : "";
 
+  useEffect(() => {
+    if (
+      user?.approval_status === "approved" &&
+      localStorage.getItem("profile_update_pending") === "true"
+    ) {
+      localStorage.removeItem("profile_update_pending");
+      navigate(basePath + "/dashboard", { replace: true });
+    }
+  }, [user?.approval_status, navigate, basePath]);
+
   async function handleProfileSubmit(data) {
     try {
       await saveProfile(data);
+      if (user?.role === "student" || user?.role === "parent") {
+        localStorage.setItem("profile_update_pending", "true");
+      }
       setSaveSuccess(true);
-      setTimeout(() => {
+      if (user?.role === "student" || user?.role === "parent") {
         navigate("/approval-pending", { replace: true });
-      }, 800);
+      }
     } catch (err) {
       // Errors are handled by the hook and shown via error state.
     }
@@ -148,7 +161,9 @@ export default function ProfilePage() {
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert severity="success" onClose={() => setSaveSuccess(false)} sx={{ width: "100%" }}>
-          Profile saved successfully.
+          {user?.role === "student" || user?.role === "parent"
+            ? "Your profile update request has been submitted successfully and is awaiting teacher approval."
+            : "Profile saved successfully."}
         </Alert>
       </Snackbar>
 
@@ -310,6 +325,20 @@ export default function ProfilePage() {
           </Button>
         </Stack>
       </Paper>
+      <Snackbar
+        open={saveSuccess}
+        autoHideDuration={3000}
+        onClose={() => setSaveSuccess(false)}
+        message="Profile updated successfully."
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+      <Snackbar
+        open={Boolean(error)}
+        autoHideDuration={4000}
+        onClose={clearError}
+        message="Failed to update profile. Please try again."
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Container>
   );
 }

@@ -60,9 +60,10 @@ export function useProfile() {
         phone: normalized?.phone ?? user?.phone,
         email: normalized?.email ?? user?.email,
         avatar_url: avatarUrl,
-        ...(typeof normalized?.first_login === "boolean"
-          ? { first_login: normalized.first_login }
-          : {}),
+        first_login:
+          normalized?.first_login === true || normalized?.user?.first_login === true
+            ? true
+            : false,
         ...(normalized?.approval_status
           ? { approval_status: normalized.approval_status }
           : {}),

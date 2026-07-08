@@ -1,7 +1,9 @@
-import { Box, Typography, Card, CardContent, Button, Avatar, Chip, Container, Stack, Divider, CircularProgress, Alert, Tabs, Tab } from "@mui/material";
-import { Check, Close } from "@mui/icons-material";
-import { useState, useEffect, useMemo } from "react";
+import { Box, Typography, Card, CardContent, Button, Avatar, Chip, Container, Stack, Divider, CircularProgress, Alert, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText } from "@mui/material";
+import { Check, Close, HistoryEdu } from "@mui/icons-material";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getTeacherPendingApprovals, approveRequest, approveParentRequest } from "../approvals.api";
+import ApprovalHistorySidebar from "../components/ApprovalHistorySidebar";
 
 const detailFields = [
     "username",
@@ -61,6 +63,14 @@ export default function ApprovalsPage() {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
     const [actionError, setActionError] = useState("");
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, id: null, action: null });
+    const [searchParams] = useSearchParams();
+    const targetUserId = searchParams.get('user_id');
+    const expandedTargetRef = useRef(false);
+
+    const resolveApprovalId = (r) => r.id; // Helper normally outside but assume it's somewhere or use simple r.id
+    const resolveParentId = (r) => r.id;
 
     const fetchApprovals = async () => {
         try {
@@ -125,20 +135,49 @@ export default function ApprovalsPage() {
         fetchApprovals();
     }, []);
 
+    useEffect(() => {
+        if (!loading && targetUserId && !expandedTargetRef.current) {
+            // Find in students
+            const studentMatch = studentRequests.find(r => String(r.user_id) === String(targetUserId) || String(r?.student?.user_id) === String(targetUserId) || String(r?.user?.id) === String(targetUserId));
+            if (studentMatch) {
+                setActiveTab("students");
+                setExpandedId(studentMatch.id);
+                expandedTargetRef.current = true;
+                return;
+            }
+            
+            // Find in parents
+            const parentMatch = parentRequests.find(r => String(r.user_id) === String(targetUserId) || String(r?.parent?.user_id) === String(targetUserId) || String(r?.user?.id) === String(targetUserId));
+            if (parentMatch) {
+                setActiveTab("parents");
+                setExpandedId(parentMatch.id);
+                expandedTargetRef.current = true;
+            }
+        }
+    }, [loading, studentRequests, parentRequests, targetUserId]);
+
     const handleAction = async (type, id, action) => {
         try {
             setActionError("");
             if (type === "parent_profile") {
                 await approveParentRequest(id, action);
-                setParentRequests(prev => prev.filter(r => resolveParentId(r) !== Number(id)));
+                setParentRequests(prev => prev.filter(r => String(resolveParentId(r)) !== String(id)));
             } else {
                 await approveRequest(type, id, action);
-                setStudentRequests(prev => prev.filter(r => resolveApprovalId(r) !== Number(id)));
+                setStudentRequests(prev => prev.filter(r => String(resolveApprovalId(r)) !== String(id)));
             }
-            if (expandedId === Number(id)) setExpandedId(null);
+            if (String(expandedId) === String(id)) setExpandedId(null);
+            setConfirmDialog({ open: false, type: null, id: null, action: null });
         } catch (err) {
             console.error(`Failed to ${action} request`, err);
             setActionError(err?.response?.data?.message || err?.message || `Failed to ${action} request`);
+            setConfirmDialog(prev => ({ ...prev, open: false }));
+        }
+    };
+
+    const confirmAction = () => {
+        if (confirmDialog.type && confirmDialog.id && confirmDialog.action) {
+            handleAction(confirmDialog.type, confirmDialog.id, confirmDialog.action);
         }
     };
 
@@ -170,13 +209,22 @@ export default function ApprovalsPage() {
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
-            <Box sx={{ mb: 4, borderBottom: 1, borderColor: 'divider', pb: 2 }}>
-                <Typography variant="h4" fontWeight="bold">
-                    Pending Approvals
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Review student and parent requests (class teacher scope)
-                </Typography>
+            <Box sx={{ mb: 4, borderBottom: 1, borderColor: 'divider', pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box>
+                    <Typography variant="h4" fontWeight="bold">
+                        Pending Approvals
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Review student and parent requests (class teacher scope)
+                    </Typography>
+                </Box>
+                <Button 
+                    variant="outlined" 
+                    startIcon={<HistoryEdu />} 
+                    onClick={() => setIsHistoryOpen(true)}
+                >
+                    Approval History
+                </Button>
             </Box>
             <Box sx={{ mb: 2 }}>
                 <Tabs
@@ -258,80 +306,189 @@ export default function ApprovalsPage() {
                                               ? `${req.relation_type || "Parent"} • Class ${className} - ${sectionName}`
                                               : `Class ${className} - ${sectionName}`}
                                         </Typography>
-                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
+                                        
+                                        {(() => {
+                                            const pendingUpdates = req.pending_updates || req.pendingUpdates || {};
+                                            const userUpdates = pendingUpdates.user || {};
+                                            const entityUpdates = pendingUpdates.student || pendingUpdates.parent || {};
+                                            const allUpdates = { ...userUpdates, ...entityUpdates };
+                                            const updateKeys = Object.keys(allUpdates);
+                                            if (updateKeys.length === 0) return null;
+
+                                            const fieldLabels = {
+                                              name: 'Name', phone: 'Phone', email: 'Email',
+                                              dob: 'Date of Birth', gender: 'Gender', blood_group: 'Blood Group',
+                                              father_name: 'Father Name', mother_name: 'Mother Name',
+                                              guardian_name: 'Guardian Name', father_occupation: 'Father Occupation',
+                                              mother_occupation: 'Mother Occupation', address: 'Address',
+                                              family_income: 'Family Income', relation_type: 'Relation Type',
+                                              avatar_url: 'Profile Photo',
+                                            };
+
+                                            // Only count fields that actually changed
+                                            const changedFields = updateKeys.filter(field => {
+                                              if (field === 'avatar_url') return true;
+                                              const newVal = allUpdates[field];
+                                              const oldVal = req?.student?.user?.[field] ?? req?.student?.[field] ?? req?.user?.[field] ?? req?.[field];
+                                              const normalize = (v) => (v ?? '').toString().trim();
+                                              return normalize(oldVal) !== normalize(newVal);
+                                            });
+
+                                            if (changedFields.length === 0) return null;
+
+                                            // Collapsed: show short summary only (no values)
+                                            let shortSummary = '';
+                                            if (changedFields.length === 1) {
+                                              const f = changedFields[0];
+                                              const lbl = fieldLabels[f] || f.replace(/_/g, ' ');
+                                              shortSummary = `${lbl} change request`;
+                                            } else {
+                                              const labels = changedFields.map(f => fieldLabels[f] || f.replace(/_/g, ' '));
+                                              shortSummary = `${labels.join(', ')} change request`;
+                                            }
+
+                                            return (
+                                                <Typography variant="subtitle2" color="error.main" sx={{ mt: 1, fontWeight: 'bold' }}>
+                                                    {shortSummary}
+                                                </Typography>
+                                            );
+                                        })()}
+
+                                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-line', display: 'block', mt: 0.5 }}>
                                             {requestedText}
                                         </Typography>
 
-                                        {isExpanded && req.changes && (
-                                            <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-                                                <Typography variant="caption" fontWeight="bold" display="block" sx={{ mb: 1 }}>
-                                                    REQUESTED CHANGES
-                                                </Typography>
-                                                {Object.entries(req.changes).map(([key, value]) => (
-                                                    <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                                                            {key.replace('_', ' ')}:
-                                                        </Typography>
-                                                        <Typography variant="body2" fontWeight="medium">
-                                                            {String(value)}
-                                                        </Typography>
-                                                    </Box>
-                                                ))}
-                                            </Box>
-                                        )}
                                     </Box>
                                 </Box>
 
                                 {isExpanded && (
                                   <>
                                     <Divider sx={{ my: 2 }} />
+                                    {/* Changed fields summary at top of expanded view */}
+                                    {(() => {
+                                      const pendingUpdates = req.pending_updates || req.pendingUpdates || {};
+                                      const allUp = { ...(pendingUpdates.user || {}), ...(pendingUpdates.student || pendingUpdates.parent || {}) };
+                                      const fieldLabels = {
+                                        name: 'Name', phone: 'Phone', email: 'Email', dob: 'Date of Birth',
+                                        gender: 'Gender', blood_group: 'Blood Group', father_name: 'Father Name',
+                                        mother_name: 'Mother Name', guardian_name: 'Guardian Name',
+                                        father_occupation: 'Father Occupation', mother_occupation: 'Mother Occupation',
+                                        address: 'Address', family_income: 'Family Income', relation_type: 'Relation Type',
+                                        avatar_url: 'Profile Photo',
+                                      };
+                                      const normalize = (v) => (v ?? '').toString().trim();
+                                      const changedLines = Object.keys(allUp).filter(field => {
+                                        if (field === 'avatar_url') return true;
+                                        const oldV = req?.student?.user?.[field] ?? req?.student?.[field] ?? req?.user?.[field] ?? req?.[field];
+                                        return normalize(oldV) !== normalize(allUp[field]);
+                                      }).map(field => {
+                                        const lbl = fieldLabels[field] || field.replace(/_/g, ' ');
+                                        if (field === 'avatar_url') return `• ${lbl}: Updated`;
+                                        const oldV = req?.student?.user?.[field] ?? req?.student?.[field] ?? req?.user?.[field] ?? req?.[field];
+                                        const oldNorm = normalize(oldV);
+                                        return oldNorm
+                                          ? `• ${lbl}: ${oldV} → ${allUp[field]}`
+                                          : `• ${lbl}: → ${allUp[field]}`;
+                                      });
+                                      if (changedLines.length === 0) return null;
+                                      return (
+                                        <Box sx={{ bgcolor: 'error.50', border: '1px solid', borderColor: 'error.200', borderRadius: 1, p: 1.5, mb: 2 }}>
+                                          <Typography variant="caption" fontWeight="bold" color="error.main" sx={{ display: 'block', mb: 0.5 }}>
+                                            Changes Requested:
+                                          </Typography>
+                                          <Typography variant="body2" color="error.dark" sx={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>
+                                            {changedLines.join('\n')}
+                                          </Typography>
+                                        </Box>
+                                      );
+                                    })()}
                                     <Stack spacing={0.75} sx={{ mb: 2 }}>
+
                                       {detailFields.map((field) => {
-                                        let value =
+                                        let oldValue =
                                           req?.student?.user?.[field] ??
                                           req?.student?.[field] ??
                                           req?.user?.[field] ??
                                           req?.[field];
 
                                         if (field === "username") {
-                                          value = req?.student?.user?.username || req?.user?.username || req?.username;
+                                          oldValue = req?.student?.user?.username || req?.user?.username || req?.username;
                                         }
-                                        if (field === "class") value = className;
-                                        if (field === "section") value = sectionName;
+                                        if (field === "class") oldValue = className;
+                                        if (field === "section") oldValue = sectionName;
 
-                                        if (value === undefined || value === null || value === "") return null;
+                                        const pendingUpdates = req.pending_updates || req.pendingUpdates || {};
+                                        const allUpdates = { ...(pendingUpdates.user || {}), ...(pendingUpdates.student || pendingUpdates.parent || {}) };
+                                        
+                                        const fieldInPending = allUpdates[field] !== undefined;
+                                        const newValue = allUpdates[field];
+                                        const normalize = (v) => (v ?? '').toString().trim();
+                                        // Only treat as a real update if the value actually changed
+                                        const hasUpdate = fieldInPending && normalize(newValue) !== normalize(oldValue);
+
+                                        if ((oldValue === undefined || oldValue === null || oldValue === "") && !fieldInPending) return null;
 
                                         return (
-                                          <Box key={field} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                                            <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                                              {field.replace("_", " ")}
+                                          <Box key={field} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'center' }}>
+                                            <Typography variant="body2" color={hasUpdate ? "error.main" : "text.secondary"} sx={{ textTransform: 'capitalize', fontWeight: hasUpdate ? 600 : 400 }}>
+                                              {field.replace(/_/g, " ")}
                                             </Typography>
-                                            <Typography variant="body2" fontWeight="medium">
-                                              {String(value)}
-                                            </Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                {hasUpdate ? (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.disabled' }}>
+                                                            {String(oldValue || '-')}
+                                                        </Typography>
+                                                        <Typography variant="body2" color="text.secondary">→</Typography>
+                                                        <Typography variant="body2" fontWeight="bold" color="error.main">
+                                                            {String(newValue)}
+                                                        </Typography>
+                                                    </>
+                                                ) : (
+                                                    <Typography variant="body2" fontWeight="medium">
+                                                        {String(oldValue)}
+                                                    </Typography>
+                                                )}
+                                            </Box>
                                           </Box>
                                         );
                                       })}
                                     </Stack>
 
                                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                                      <Button
-                                        variant="outlined"
-                                        color="error"
-                                        startIcon={<Close />}
-                                        onClick={(e) => { e.stopPropagation(); handleAction(isParentTab ? 'parent_profile' : 'student_profile', isParentTab ? parentId : approvalId, 'reject'); }}
-                                      >
-                                        Reject
-                                      </Button>
-                                      <Button
-                                        variant="contained"
-                                        color="success"
-                                        startIcon={<Check />}
-                                        onClick={(e) => { e.stopPropagation(); handleAction(isParentTab ? 'parent_profile' : 'student_profile', isParentTab ? parentId : approvalId, 'approve'); }}
-                                      >
-                                        Approve
-                                      </Button>
-                                    </Box>
+                                        <Button
+                                          variant="outlined"
+                                          color="error"
+                                          startIcon={<Close />}
+                                          onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setConfirmDialog({ 
+                                              open: true, 
+                                              type: isParentTab ? 'parent_profile' : 'student_profile', 
+                                              id: isParentTab ? parentId : approvalId, 
+                                              action: 'reject' 
+                                            }); 
+                                          }}
+                                        >
+                                          Reject
+                                        </Button>
+                                        <Button
+                                          variant="contained"
+                                          color="success"
+                                          startIcon={<Check />}
+                                          onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setConfirmDialog({ 
+                                              open: true, 
+                                              type: isParentTab ? 'parent_profile' : 'student_profile', 
+                                              id: isParentTab ? parentId : approvalId, 
+                                              action: 'approve' 
+                                            }); 
+                                          }}
+                                        >
+                                          Approve
+                                        </Button>
+                                      </Box>
                                   </>
                                 )}
 
@@ -341,6 +498,35 @@ export default function ApprovalsPage() {
                     })}
                 </Stack>
             )}
+            
+            <ApprovalHistorySidebar open={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+
+            {/* Confirmation Dialog */}
+            <Dialog
+                open={confirmDialog.open}
+                onClose={() => setConfirmDialog({ open: false, type: null, id: null, action: null })}
+            >
+                <DialogTitle>Confirm Action</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to {confirmDialog.action === "approve" ? "approve" : "reject"} this request?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmDialog({ open: false, type: null, id: null, action: null })}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={confirmAction} 
+                        color={confirmDialog.action === "approve" ? "success" : "error"} 
+                        variant="contained"
+                        autoFocus
+                    >
+                        {confirmDialog.action === "approve" ? "Yes, Approve" : "Yes, Reject"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
         </Container>
     );
 }

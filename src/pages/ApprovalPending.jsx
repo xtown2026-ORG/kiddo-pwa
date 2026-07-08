@@ -17,16 +17,14 @@ export default function ApprovalPending() {
       const res = await getMyProfile(user.role);
       const data = res?.data || {};
       const status = data?.approval_status || data?.user?.approval_status;
-      const firstLogin =
-        typeof data?.first_login === "boolean"
-          ? data.first_login
-          : typeof data?.user?.first_login === "boolean"
-            ? data.user.first_login
-            : undefined;
+      const firstLogin = data?.first_login === true || data?.user?.first_login === true;
+      const normalized = data?.user ? { ...data, ...data.user } : data;
 
       updateUser?.({
         ...(status ? { approval_status: status } : {}),
-        ...(typeof firstLogin === "boolean" ? { first_login: firstLogin } : {}),
+        first_login: firstLogin,
+        name: normalized?.name,
+        avatar_url: normalized?.avatar_url || normalized?.avatar || "",
       });
 
       if (status === "approved") {

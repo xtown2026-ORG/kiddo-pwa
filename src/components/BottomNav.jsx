@@ -76,13 +76,8 @@ export default function BottomNav() {
       <BottomNavigation
         value={value}
         onChange={(_, newValue) => {
-          if (newValue === "SIDEBAR_TRIGGER") {
-            // Dispatch a custom event or use a callback if passed
-            window.dispatchEvent(new Event("toggle-teacher-sidebar"));
-            return;
-          }
-          if (newValue === "SIDEBAR_STUDENT") {
-            window.dispatchEvent(new Event("toggle-student-sidebar"));
+          // Sidebar triggers are handled exclusively by onClick to avoid double dispatch
+          if (newValue === "SIDEBAR_TRIGGER" || newValue === "SIDEBAR_STUDENT") {
             return;
           }
           setValue(newValue);
@@ -96,6 +91,13 @@ export default function BottomNav() {
             label={item.label}
             icon={item.icon}
             value={item.path}
+            onClick={() => {
+              if (item.path === "SIDEBAR_TRIGGER") {
+                window.dispatchEvent(new Event("toggle-teacher-sidebar"));
+              } else if (item.path === "SIDEBAR_STUDENT") {
+                window.dispatchEvent(new Event("toggle-student-sidebar"));
+              }
+            }}
           />
         ))}
       </BottomNavigation>

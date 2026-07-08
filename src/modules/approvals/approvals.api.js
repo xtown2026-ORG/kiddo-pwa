@@ -8,3 +8,6 @@ export const approveRequest = (type, id, action = 'approve') =>
 
 export const approveParentRequest = (id, action = "approve") =>
     api.post(`/teachers/parents/${id}/approve`, { action });
+
+export const getTeacherApprovalHistory = (params = {}) =>
+    api.get("/teachers/approvals/history", { params });
