@@ -193,6 +193,9 @@ export default function ApprovalsPage() {
                 const leftName = getDisplayName(left, activeTab);
                 const rightName = getDisplayName(right, activeTab);
 
+                const leftUsername = left?.user?.username || left?.username || "";
+                const rightUsername = right?.user?.username || right?.username || "";
+
                 return String(leftUsername).localeCompare(String(rightUsername), undefined, {
                     numeric: true,
                     sensitivity: "base",
@@ -499,7 +502,7 @@ export default function ApprovalsPage() {
                 </Stack>
             )}
             
-            <ApprovalHistorySidebar open={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+            <ApprovalHistorySidebar open={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} limit={10} />
 
             {/* Confirmation Dialog */}
             <Dialog
