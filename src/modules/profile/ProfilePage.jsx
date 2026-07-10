@@ -68,9 +68,8 @@ export default function ProfilePage() {
       localStorage.getItem("profile_update_pending") === "true"
     ) {
       localStorage.removeItem("profile_update_pending");
-      navigate(basePath + "/dashboard", { replace: true });
     }
-  }, [user?.approval_status, navigate, basePath]);
+  }, [user?.approval_status]);
 
   async function handleProfileSubmit(data) {
     try {

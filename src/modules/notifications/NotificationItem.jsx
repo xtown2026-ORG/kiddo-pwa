@@ -21,8 +21,9 @@ export default function NotificationItem({
   const isMine = user && String(item.sender_user_id) === String(user.id);
   
   // Format the date nicely (e.g., "Jul 15, 2026, 10:30 AM")
-  const createdAt = item.created_at
-    ? new Date(item.created_at).toLocaleString("en-US", {
+  const dateVal = item.createdAt || item.created_at;
+  const createdAt = dateVal
+    ? new Date(dateVal).toLocaleString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",

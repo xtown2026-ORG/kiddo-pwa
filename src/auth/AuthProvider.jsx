@@ -173,9 +173,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!SUPPORTED_ROLES.includes(decoded.role)) {
-        throw new Error(
-          "This portal supports only student, teacher, and parent accounts"
-        );
+        throw new Error("Invalid email/username/phone or password.");
       }
 
       localStorage.setItem("token", jwt);

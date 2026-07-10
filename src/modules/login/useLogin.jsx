@@ -43,9 +43,7 @@ export function useLogin() {
       let message = "Login failed";
       
       // Handle different types of errors with user-friendly messages
-      if (err.message) {
-        message = err.message;
-      } else if (err?.response?.data?.message) {
+      if (err?.response?.data?.message) {
         message = err.response.data.message;
       } else if (err?.response?.status) {
         switch (err.response.status) {
@@ -64,6 +62,8 @@ export function useLogin() {
           default:
             message = "Login failed. Please try again";
         }
+      } else if (err.message) {
+        message = err.message;
       }
       
       setError(message);
