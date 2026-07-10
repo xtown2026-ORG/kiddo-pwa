@@ -51,16 +51,22 @@ export default function NotificationsPage() {
   }
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 4, pb: 10 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, pb: 10 }}>
+      <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold', color: '#1e293b' }}>
         Notifications
       </Typography>
       {user?.role === "parent" ? <ParentChildSwitcher label="Student" /> : null}
 
-      <NotificationsList
-        items={items}
-        onAcknowledge={acknowledge}
-      />
+      {items && items.filter(item => !item.is_acknowledged).length > 0 ? (
+        <NotificationsList
+          items={items.filter(item => !item.is_acknowledged)}
+          onAcknowledge={acknowledge}
+        />
+      ) : (
+        <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+          No new notifications.
+        </Typography>
+      )}
 
       {canCreate && (
         <>

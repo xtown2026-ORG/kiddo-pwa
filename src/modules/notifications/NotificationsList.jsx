@@ -1,4 +1,4 @@
-import { Stack } from "@mui/material";
+import { Grid, Box } from "@mui/material";
 import NotificationItem from "./NotificationItem";
 
 export default function NotificationsList({
@@ -6,14 +6,17 @@ export default function NotificationsList({
   onAcknowledge,
 }) {
   return (
-    <Stack spacing={2}>
+    <Grid container spacing={3} alignItems="stretch">
       {items.map((item) => (
-        <NotificationItem
-          key={item.id}
-          item={item}
-          onAcknowledge={onAcknowledge}
-        />
+        <Grid item xs={12} key={item.id} sx={{ display: 'flex' }}>
+          <Box sx={{ width: '100%' }}>
+            <NotificationItem
+              item={item}
+              onAcknowledge={onAcknowledge}
+            />
+          </Box>
+        </Grid>
       ))}
-    </Stack>
+    </Grid>
   );
 }

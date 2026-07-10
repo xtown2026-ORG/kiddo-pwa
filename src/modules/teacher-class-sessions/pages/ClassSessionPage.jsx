@@ -1,5 +1,5 @@
-import { Box, Typography, Button, Paper, Container, Grid, Card, CardContent, Chip, CircularProgress, Stack, ToggleButtonGroup, ToggleButton, Dialog, DialogTitle, DialogContent, DialogActions, Alert } from "@mui/material";
-import { PlayArrow, Stop, Timer, Class, AccessTime, History } from "@mui/icons-material";
+import { Box, Typography, Button, Paper, Container, Grid, Card, CardContent, Chip, CircularProgress, Stack, ToggleButtonGroup, ToggleButton, Dialog, DialogTitle, DialogContent, DialogActions, Alert, IconButton } from "@mui/material";
+import { PlayArrow, Stop, Timer, Class, AccessTime, History, Visibility } from "@mui/icons-material";
 import { useState, useEffect, useMemo } from "react";
 import { startClassSession, endClassSession, listClassSessions, markSessionAttendance, listStudentsBySection } from "../teacherSession.api";
 import { useAuth } from "../../../auth/AuthProvider";
@@ -28,6 +28,8 @@ export default function ClassSessionPage() {
     const [homeworkPrompt, setHomeworkPrompt] = useState(null);
     const [homeworkPromptOpen, setHomeworkPromptOpen] = useState(false);
     const [homeworkDialogOpen, setHomeworkDialogOpen] = useState(false);
+    const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+    const [selectedSummarySession, setSelectedSummarySession] = useState(null);
     const [lastHomeworkSessionId, setLastHomeworkSessionId] = useState(null);
     const promptHomeworkForSession = createHomeworkPrompter(
         setHomeworkPrompt,
@@ -382,7 +384,7 @@ export default function ClassSessionPage() {
             <Grid container spacing={2}>
                 {todaySlots?.map((entry) => {
                     const matchingSession = todaySessions.find(
-                        (s) => s.timetable_id == entry.id && !s.ended_at
+                        (s) => s.timetable_id == entry.id
                     );
                     const activeSessionForEntry =
                         activeSession && activeSession.timetable_id == entry.id && !activeSession.ended_at
@@ -400,8 +402,8 @@ export default function ClassSessionPage() {
 
                     return (
                         <Grid item xs={12} sm={6} md={4} key={entry.id}>
-                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #4f46e5' }}>
-                                <CardContent sx={{ flex: 1 }}>
+                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #4f46e5', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 3 }}>
 
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                         <Chip
@@ -413,39 +415,41 @@ export default function ClassSessionPage() {
                                         {entry.status === 'completed' && <Chip label="Done" color="success" size="small" />}
                                     </Box>
 
-                                    <Typography variant="h6" gutterBottom>
-                                        {entry.subject?.name}
+                                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#1e293b' }}>
+                                        {entry.subject?.name || "General Subject"}
                                     </Typography>
 
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', mb: 2 }}>
                                         <Class fontSize="small" />
-                                        <Typography variant="body2">
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
                                             Class {entry.class?.class_name || entry.class?.name} ({entry.section?.name})
                                         </Typography>
                                     </Box>
 
-                                    <Button
-                                        variant="outlined"
-                                        fullWidth
-                                        startIcon={<PlayArrow />}
-                                        onClick={() => handleStartClass(entry)}
-                                        disabled={
-                                            activeSession ||
-                                            entry.status === 'completed' ||
-                                            loading ||
-                                            isFinished ||
-                                            !canStartNow(entry)
-                                        }
-                                    >
-                                        {isFinished ? "Finished" : "Start"}
-                                    </Button>
-                                    {matchingSession && !matchingSession.ended_at && (
+
+                                    <Box sx={{ mt: 'auto', pt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {!isClassPast(entry) && (
+                                        <Button
+                                            variant="outlined"
+                                            fullWidth
+                                            startIcon={<PlayArrow />}
+                                            onClick={() => handleStartClass(entry)}
+                                            disabled={
+                                                activeSession ||
+                                                entry.status === 'completed' ||
+                                                loading ||
+                                                isFinished
+                                            }
+                                        >
+                                            {isFinished ? "Finished" : "Start"}
+                                        </Button>
+                                    )}
+                                    {matchingSession && !matchingSession.ended_at && !isClassPast(entry) && (
                                         <Button
                                             variant="contained"
                                             color="error"
                                             fullWidth
                                             startIcon={<Stop />}
-                                            sx={{ mt: 1 }}
                                             onClick={() => handleEndById(resolveSessionId(matchingSession))}
                                             disabled={loading}
                                         >
@@ -454,25 +458,50 @@ export default function ClassSessionPage() {
                                     )}
                                     {(() => {
                                         const attendanceSaved = currentSession && currentSession.attendance_marked > 0;
+                                        const isFlexible = isFlexibleHours();
                                         return (
                                             <Button
                                                 variant="text"
+                                                color="primary"
                                                 fullWidth
-                                                sx={{ mt: 1 }}
-                                                onClick={() =>
-                                                    currentSession &&
-                                                    openAttendance(currentSession, entry)
-                                                }
-                                                disabled={!currentSession || attendanceSaved}
+                                                sx={{ fontWeight: 600 }}
+                                                onClick={async () => {
+                                                    let sessionToUse = currentSession;
+                                                    if (!sessionToUse) {
+                                                        setLoading(true);
+                                                        try {
+                                                            const classId = resolveClassId(entry);
+                                                            const sectionId = resolveSectionId(entry);
+                                                            const subjectId = resolveSubjectId(entry);
+                                                            const teacherAssignmentId = resolveTeacherAssignmentId(entry);
+                                                            const res = await startClassSession({
+                                                                timetable_id: entry.id,
+                                                                teacher_assignment_id: teacherAssignmentId,
+                                                                assignment_id: teacherAssignmentId,
+                                                                class_id: classId,
+                                                                section_id: sectionId,
+                                                                subject_id: subjectId
+                                                            });
+                                                            sessionToUse = res.data?.data || res.data;
+                                                            fetchSessions();
+                                                        } catch (err) {
+                                                            console.error("Auto-start failed", err);
+                                                            alert(`Failed to open attendance: ${err?.response?.data?.message || err?.message || 'Unknown error'}`);
+                                                        } finally {
+                                                            setLoading(false);
+                                                        }
+                                                    }
+                                                    if (sessionToUse) {
+                                                        openAttendance(sessionToUse, entry);
+                                                    }
+                                                }}
+                                                disabled={loading || attendanceSaved || (!currentSession && !isFlexible)}
                                             >
-                                                {!currentSession
-                                                    ? "Attendance (start first)"
-                                                    : attendanceSaved
-                                                        ? "Attendance Saved"
-                                                        : "Mark Attendance"}
+                                                {attendanceSaved ? "Attendance Saved / Closed" : "Mark Attendance"}
                                             </Button>
                                         );
                                     })()}
+                                    </Box>
                                 </CardContent>
                             </Card>
                         </Grid>
@@ -530,9 +559,23 @@ export default function ClassSessionPage() {
                                         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                                             {new Date(s.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                                         </Typography>
-                                        <Typography variant="h6" sx={{ mb: 1 }}>
-                                            {s.subject?.name || "Subject"}
-                                        </Typography>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                                {s.subject?.name || "Subject"}
+                                            </Typography>
+                                            {s.attendance_marked > 0 && (
+                                                <IconButton 
+                                                    size="small" 
+                                                    color="primary"
+                                                    onClick={() => {
+                                                        setSelectedSummarySession(s);
+                                                        setSummaryDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <Visibility fontSize="small" />
+                                                </IconButton>
+                                            )}
+                                        </Box>
                                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                                             Class {s.class?.name || s.class?.class_name || "-"} ({s.section?.name || "-"})
                                         </Typography>
@@ -546,6 +589,52 @@ export default function ClassSessionPage() {
                     </Grid>
                 )}
             </Box>
+
+            <Dialog open={summaryDialogOpen} onClose={() => setSummaryDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Attendance Summary</DialogTitle>
+                <DialogContent>
+                    {selectedSummarySession && (
+                        <Box sx={{ textAlign: 'center', py: 2 }}>
+                            <Typography variant="h6" gutterBottom>
+                                {selectedSummarySession.subject?.name || "Subject"}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                Class {selectedSummarySession.class?.name || selectedSummarySession.class?.class_name || "-"} ({selectedSummarySession.section?.name || "-"})
+                            </Typography>
+                            <Box sx={{ mt: 2, mb: 1, px: 2, py: 1, bgcolor: 'background.default', borderRadius: 2, display: 'inline-block' }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                                    Total Students: {selectedSummarySession.attendance_expected || 0}
+                                </Typography>
+                            </Box>
+                            <Stack direction="row" spacing={2} justifyContent="center" alignItems="flex-start" sx={{ mt: 2 }}>
+                                <Paper sx={{ p: 2, minWidth: 100, bgcolor: 'success.light', color: 'success.contrastText' }}>
+                                    <Typography variant="h4">{selectedSummarySession.present_count || 0}</Typography>
+                                    <Typography variant="body2">Present</Typography>
+                                </Paper>
+                                <Paper sx={{ p: 2, minWidth: 120, bgcolor: 'error.light', color: 'error.contrastText' }}>
+                                    <Typography variant="h4">{selectedSummarySession.absent_count || 0}</Typography>
+                                    <Typography variant="body2" sx={{ mb: selectedSummarySession.absent_students?.length > 0 ? 1 : 0 }}>Absent</Typography>
+                                    
+                                    {selectedSummarySession.absent_students && selectedSummarySession.absent_students.length > 0 && (
+                                        <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(255,255,255,0.3)', textAlign: 'left' }}>
+                                            <Stack spacing={0.5}>
+                                                {selectedSummarySession.absent_students.map((student, idx) => (
+                                                    <Typography key={idx} variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
+                                                        • {student.name}
+                                                    </Typography>
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+                                </Paper>
+                            </Stack>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSummaryDialogOpen(false)}>Close</Button>
+                </DialogActions>
+            </Dialog>
 
             <Dialog open={attendanceOpen} onClose={() => setAttendanceOpen(false)} fullWidth maxWidth="sm">
                 <DialogTitle sx={{ pb: 1 }}>Mark Attendance</DialogTitle>
@@ -787,25 +876,28 @@ function formatTimeLabel(dateOrTime) {
     return String(dateOrTime);
 }
 
-function canStartNow(entry) {
+function isFlexibleHours() {
+    const now = new Date();
+    const startWindow = new Date(now);
+    startWindow.setHours(9, 0, 0, 0); // 9:00 AM
+    const endWindow = new Date(now);
+    endWindow.setHours(16, 30, 0, 0); // 4:30 PM
+    return now >= startWindow && now <= endWindow;
+}
+
+function isClassPast(entry) {
     const now = new Date();
     const startTime = entry?.start_time ?? entry?.startTime ?? entry?.timetable?.start_time;
-    const start = startTime ? parseTimeOnDate(now, startTime) : null;
+    if (!startTime) return false;
+    const start = parseTimeOnDate(now, startTime);
     if (!start) return false;
     const end = new Date(start.getTime() + SESSION_DURATION_MS);
-    return now >= start && now <= end;
+    return now > end;
 }
 
 function isSessionExpiredByTime(sessionObj, timetableEntry) {
-    const sessionStart = sessionObj?.started_at ? new Date(sessionObj.started_at) : null;
-    if (sessionStart) {
-        return Date.now() > sessionStart.getTime() + SESSION_DURATION_MS;
-    }
-    const startTime = timetableEntry?.start_time ?? timetableEntry?.timetable?.start_time;
-    if (!startTime) return false;
-    const start = parseTimeOnDate(new Date(), startTime);
-    if (!start) return false;
-    return Date.now() > start.getTime() + SESSION_DURATION_MS;
+    // Requirements changed: Teachers can fill attendance anytime
+    return false;
 }
 
 function promptHomeworkPayload(session) {
