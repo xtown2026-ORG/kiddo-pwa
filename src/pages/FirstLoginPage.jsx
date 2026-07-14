@@ -168,13 +168,33 @@ export default function FirstLoginPage() {
   }
 
   async function handleNext() {
-    if (activeStep === steps.length - 1) {
+    if (activeStep === 0) {
+      if (!formData.name?.trim()) {
+        setError("Full Name is required");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (!formData.phone?.trim()) {
+        setError("Phone Number is required");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (formData.phone.length < 10) {
+        setError("Please enter a valid 10-digit Phone Number");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      setError(null);
+    }
+
+    if (activeStep === steps.length - 1 || steps.length === 0) {
       // Submit form
       await handleSubmit();
     } else {
       setActiveStep((prev) => prev + 1);
     }
   }
+
 
   function handleBack() {
     if (activeStep > 0) {
@@ -410,6 +430,7 @@ export default function FirstLoginPage() {
                   value={formData.phone}
                   onChange={(e) => handleInputChange("phone", e.target.value)}
                   fullWidth
+                  required
                   inputProps={{
                     inputMode: "numeric",
                     pattern: "[0-9]*",
@@ -539,7 +560,7 @@ export default function FirstLoginPage() {
             >
               {loading ? (
                 <CircularProgress size={24} />
-              ) : activeStep === steps.length - 1 ? (
+              ) : (activeStep === steps.length - 1 || steps.length === 0) ? (
                 "Complete"
               ) : (
                 "Next"

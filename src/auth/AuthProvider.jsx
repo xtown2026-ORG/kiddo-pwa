@@ -173,7 +173,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!SUPPORTED_ROLES.includes(decoded.role)) {
-        throw new Error("Invalid email/username/phone or password.");
+        throw new Error("Invalid username or password.");
       }
 
       localStorage.setItem("token", jwt);

@@ -20,7 +20,7 @@ export default function ThemeProvider({ children }) {
   const [platformLogo, setPlatformLogo] = useState(localStorage.getItem("platform_logo") || "");
 
   useEffect(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3003/api";
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "http://localhost:3003/api";
     const ASSET_BASE_URL = API_BASE_URL.replace("/api", "");
 
     fetch(`${API_BASE_URL}/settings`)

@@ -7,21 +7,64 @@ import {
   Chip,
   useTheme,
   Alert,
+  Button,
   Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
-import { AutoAwesomeRounded } from "@mui/icons-material";
+import { 
+  AutoAwesomeRounded,
+  Close as CloseIcon,
+  Home as HomeIcon,
+  NotificationsActive as NotificationsIcon,
+  Speed as SpeedIcon 
+} from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import LoginForm from "../modules/login/LoginForm";
 import { useEffect, useState, useContext } from "react";
 import appIcon from "../assets/app-icon-192.png";
 import { ThemeModeContext } from "../theme/ThemeProvider";
+import { usePwaInstall } from "../pwa/usePwaInstall";
+import { InstallMobile as InstallIcon } from "@mui/icons-material";
 
 export default function Login() {
   const { user, loading, logout } = useAuth();
   const { mode, platformName, platformLogo } = useContext(ThemeModeContext);
+  const { canInstall, isInstalled, install } = usePwaInstall();
   const isDark = mode === "dark";
   const [blocked, setBlocked] = useState(false);
+  const [showPwaPopup, setShowPwaPopup] = useState(false);
   const hasKnownUnapprovedStatus = false;
+
+  useEffect(() => {
+    let intervalId;
+    const checkPrompt = () => {
+      if (canInstall && !isInstalled) {
+        const lastDismissed = localStorage.getItem('kiddos_pwa_login_dismissed');
+        const now = Date.now();
+        if (!lastDismissed || now - parseInt(lastDismissed) >= 5 * 60 * 1000) {
+          setShowPwaPopup(true);
+        }
+      } else {
+        setShowPwaPopup(false);
+      }
+    };
+    checkPrompt();
+    intervalId = setInterval(checkPrompt, 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [canInstall, isInstalled]);
+
+  const handleDismissPwa = () => {
+    setShowPwaPopup(false);
+    localStorage.setItem('kiddos_pwa_login_dismissed', Date.now().toString());
+  };
 
   useEffect(() => {
     if (!user?.role) return;
@@ -263,6 +306,62 @@ export default function Login() {
           </Box>
         </Box>
       </Container>
+
+      <Dialog 
+        open={showPwaPopup} 
+        onClose={handleDismissPwa}
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            p: 1,
+            backgroundImage: isDark ? 'linear-gradient(to bottom right, #1e293b, #0f172a)' : 'linear-gradient(to bottom right, #ffffff, #f8fafc)',
+            boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+            maxWidth: 400,
+          }
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: isDark ? 'rgba(15, 23, 42, 0.5)' : 'rgba(255, 255, 255, 0.4)',
+              backdropFilter: 'blur(8px)'
+            }
+          }
+        }}
+      >
+        <DialogTitle sx={{ m: 0, p: 2, pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>Install Kiddoshadow</Typography>
+          <IconButton onClick={handleDismissPwa} sx={{ color: 'text.secondary' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: 'text.secondary', mb: 2 }}>
+            Install the app for a faster and better learning experience.
+          </Typography>
+          <List sx={{ pt: 0 }}>
+            <ListItem sx={{ px: 0, py: 1 }}>
+              <ListItemIcon sx={{ minWidth: 40 }}><HomeIcon sx={{ color: '#0ea5e9' }} /></ListItemIcon>
+              <ListItemText primary="Faster access directly from your Home Screen" primaryTypographyProps={{ fontWeight: 600, variant: 'body2', color: 'text.primary' }} />
+            </ListItem>
+            <ListItem sx={{ px: 0, py: 1 }}>
+              <ListItemIcon sx={{ minWidth: 40 }}><NotificationsIcon sx={{ color: '#10b981' }} /></ListItemIcon>
+              <ListItemText primary="Instant notifications and real-time updates" primaryTypographyProps={{ fontWeight: 600, variant: 'body2', color: 'text.primary' }} />
+            </ListItem>
+            <ListItem sx={{ px: 0, py: 1 }}>
+              <ListItemIcon sx={{ minWidth: 40 }}><SpeedIcon sx={{ color: '#f59e0b' }} /></ListItemIcon>
+              <ListItemText primary="Better performance and smoother experience even on slower networks." primaryTypographyProps={{ fontWeight: 600, variant: 'body2', color: 'text.primary' }} />
+            </ListItem>
+          </List>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between' }}>
+          <Button onClick={handleDismissPwa} sx={{ fontWeight: 600, color: 'text.secondary' }}>
+            Maybe Later
+          </Button>
+          <Button onClick={() => { install(); handleDismissPwa(); }} variant="contained" sx={{ borderRadius: 2, px: 3, py: 1, fontWeight: 700, backgroundImage: 'linear-gradient(135deg, #0ea5e9 0%, #10b981 100%)', boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)' }}>
+            Install Now
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

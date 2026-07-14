@@ -91,6 +91,11 @@ export default defineConfig(({ mode }) => {
       }),
     ],
 
+    // 👇 Added only for debugging
+    build: {
+      sourcemap: true,
+    },
+
     server: {
       host: devHost,
       port: devPort,
@@ -99,10 +104,10 @@ export default defineConfig(({ mode }) => {
 
       hmr: devHmrHost
         ? {
-            host: devHmrHost,
-            port: devPort,
-            clientPort: devPort,
-          }
+          host: devHmrHost,
+          port: devPort,
+          clientPort: devPort,
+        }
         : undefined,
 
       proxy: {
