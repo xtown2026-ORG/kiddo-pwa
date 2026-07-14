@@ -503,15 +503,7 @@ export function useAiChat({ classLevel, userId }) {
     }
   }
 
-  async function generateRagAnswerForMessage({ originalQuestion, mode }) {
-    const res = await generateRagAnswerMode({ originalQuestion, mode });
-    const answerText =
-      (typeof res?.data === "string" && res.data.trim() ? res.data : null) ??
-      res?.data?.answer ??
-      res?.answer ??
-      res?.data?.message ??
-      res?.message ??
-      "AI assistant is temporarily unavailable. Please try again.";
+  function appendRagAnswerForMessage({ answerText, mode }) {
     const aiMsg = {
       id: createId("msg"),
       role: "ai",
@@ -531,6 +523,19 @@ export function useAiChat({ classLevel, userId }) {
     return aiMsg.text;
   }
 
+  async function generateRagAnswerForMessage({ question, answer, mode }) {
+    const res = await generateRagAnswerMode({ question, answer, mode });
+    const answerText =
+      (typeof res?.data === "string" && res.data.trim() ? res.data : null) ??
+      res?.data?.answer ??
+      res?.answer ??
+      res?.data?.message ??
+      res?.message ??
+      "AI assistant is temporarily unavailable. Please try again.";
+
+    return appendRagAnswerForMessage({ answerText, mode });
+  }
+
   return {
     messages,
     conversations,
@@ -541,6 +546,7 @@ export function useAiChat({ classLevel, userId }) {
     historyQuery,
     sendMessage,
     generateRagAnswerForMessage,
+    appendRagAnswerForMessage,
     startNewChat: () => {
       setMessages([]);
       setActiveConversationId(null);

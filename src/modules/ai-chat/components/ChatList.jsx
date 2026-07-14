@@ -31,7 +31,7 @@ export default function ChatList({
           {shouldShowRagAnswerControls(msg) ? (
             <RagAnswerControls
               message={msg}
-              loadingMode={ragAnswerLoadingByMessageId[msg.id] || ""}
+              loadingModes={ragAnswerLoadingByMessageId[msg.id] || {}}
               onSelectMode={onRagAnswerMode}
             />
           ) : null}
@@ -50,9 +50,7 @@ function shouldShowRagAnswerControls(message) {
   );
 }
 
-function RagAnswerControls({ message, loadingMode, onSelectMode }) {
-  const isLoading = Boolean(loadingMode);
-
+function RagAnswerControls({ message, loadingModes, onSelectMode }) {
   return (
     <Box
       sx={{
@@ -67,22 +65,22 @@ function RagAnswerControls({ message, loadingMode, onSelectMode }) {
       <Button
         size="small"
         variant="outlined"
-        disabled={isLoading}
-        onClick={() => onSelectMode?.(message, "short")}
-        startIcon={loadingMode === "short" ? <CircularProgress size={14} /> : null}
+        disabled={Boolean(loadingModes.detail)}
+        onClick={() => onSelectMode?.(message, "detail")}
+        startIcon={loadingModes.detail ? <CircularProgress size={14} /> : null}
         sx={{ borderRadius: 999, textTransform: "none" }}
       >
-        {loadingMode === "short" ? "Loading..." : "Short Answer"}
+        {loadingModes.detail ? "Loading..." : "Detail"}
       </Button>
       <Button
         size="small"
         variant="outlined"
-        disabled={isLoading}
-        onClick={() => onSelectMode?.(message, "brief")}
-        startIcon={loadingMode === "brief" ? <CircularProgress size={14} /> : null}
+        disabled={Boolean(loadingModes.short)}
+        onClick={() => onSelectMode?.(message, "short")}
+        startIcon={loadingModes.short ? <CircularProgress size={14} /> : null}
         sx={{ borderRadius: 999, textTransform: "none" }}
       >
-        {loadingMode === "brief" ? "Loading..." : "Brief Answer"}
+        {loadingModes.short ? "Loading..." : "Short"}
       </Button>
     </Box>
   );

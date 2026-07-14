@@ -38,10 +38,11 @@ export function generateRagAnswerMode(payload) {
   return api.post(
     "/rag-explanation",
     {
-      originalQuestion: payload?.originalQuestion,
+      question: payload?.question,
+      answer: payload?.answer,
       mode: payload?.mode,
     },
-    payload?.mode === "brief" ? { timeout: 60000 } : undefined
+    payload?.mode === "detail" ? { timeout: 60000 } : undefined
   );
 }
 

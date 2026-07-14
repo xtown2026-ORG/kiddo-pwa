@@ -83,6 +83,7 @@ export default function AiChatPage() {
   const imageInputRef = useRef(null);
   const createdImageUrlsRef = useRef([]);
   const relatedRequestIdRef = useRef(0);
+  const ragExplanationCacheRef = useRef({ question: "", answers: {} });
   const navigate = useNavigate();
   const location = useLocation();
   const classLevel = user?.class_level ?? "general";
@@ -99,6 +100,7 @@ export default function AiChatPage() {
     historyQuery,
     sendMessage,
     generateRagAnswerForMessage,
+    appendRagAnswerForMessage,
     loadConversation,
     startNewChat,
     loadMoreConversations,
@@ -124,6 +126,7 @@ export default function AiChatPage() {
     if (showIntro) setShowIntro(false);
     const selectedImage = selectedImages[0] || null;
     const subjectForRequest = selectedSubject;
+    ragExplanationCacheRef.current = { question: text, answers: {} };
     try {
       return await sendMessage(text, null, {
         subject: subjectForRequest,
@@ -201,13 +204,31 @@ export default function AiChatPage() {
 
   async function handleRagAnswerMode(message, mode) {
     const messageId = message?.id;
-    const originalQuestion = message?.metadata?.originalQuestion;
-    if (!messageId || !originalQuestion || ragAnswerLoadingByMessageId[messageId]) return;
+    const question = message?.metadata?.originalQuestion;
+    const answer = message?.text || message?.content || "";
+    if (!messageId || !question || !answer || ragAnswerLoadingByMessageId[messageId]?.[mode]) return;
+
+    if (ragExplanationCacheRef.current.question !== question) {
+      ragExplanationCacheRef.current = { question, answers: {} };
+    }
+
+    const cachedAnswer = ragExplanationCacheRef.current.answers[mode];
+    if (cachedAnswer) {
+      appendRagAnswerForMessage({ answerText: cachedAnswer, mode });
+      return;
+    }
 
     setRagAnswerError("");
-    setRagAnswerLoadingByMessageId((prev) => ({ ...prev, [messageId]: mode }));
+    setRagAnswerLoadingByMessageId((prev) => ({
+      ...prev,
+      [messageId]: {
+        ...(prev[messageId] || {}),
+        [mode]: true,
+      },
+    }));
     try {
-      await generateRagAnswerForMessage({ originalQuestion, mode });
+      const answerText = await generateRagAnswerForMessage({ question, answer, mode });
+      ragExplanationCacheRef.current.answers[mode] = answerText;
     } catch (error) {
       setRagAnswerError(
         error?.response?.data?.message ||
@@ -217,7 +238,13 @@ export default function AiChatPage() {
     } finally {
       setRagAnswerLoadingByMessageId((prev) => {
         const next = { ...prev };
-        delete next[messageId];
+        const messageLoading = { ...(next[messageId] || {}) };
+        delete messageLoading[mode];
+        if (Object.keys(messageLoading).length) {
+          next[messageId] = messageLoading;
+        } else {
+          delete next[messageId];
+        }
         return next;
       });
     }
