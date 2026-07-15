@@ -1,5 +1,5 @@
 // Centralised API/socket configuration so we don't scatter env parsing.
-const FALLBACK_API_BASE_URL = "http://localhost:3002/api";
+const FALLBACK_API_BASE_URL = "http://192.168.1.63:3002/api";
 const configuredBase =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
   FALLBACK_API_BASE_URL;

@@ -167,6 +167,23 @@ export function AuthProvider({ children }) {
         throw new Error("Token is expired");
       }
 
+
+      // Validate required fields
+      if (!decoded.id || !decoded.role) {
+        throw new Error("Token missing required fields");
+      }
+
+      if (!SUPPORTED_ROLES.includes(decoded.role)) {
+        throw new Error(
+          "Invalid Username or Password"
+        );
+      }
+
+      localStorage.setItem("token", jwt);
+      setToken(jwt);
+      setUser(decoded);
+
+
       // Validate required fields
       if (!decoded.id || !decoded.role) {
         throw new Error("Token missing required fields");
@@ -179,6 +196,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem("token", jwt);
       setToken(jwt);
       setUser(decoded);
+
 
       return decoded;
     } catch (error) {

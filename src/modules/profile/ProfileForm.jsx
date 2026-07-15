@@ -18,6 +18,7 @@ import { createImagePreview, revokeImagePreview } from "../../utils/imageUtils";
 import DatePickerField from "../../components/DatePickerField";
 import { normalizeTitleCaseFields } from "../../utils/textFormat";
 import { useParentChild } from "../parents/ParentChildContext";
+import { useAuth } from "../../auth/AuthProvider";
 
 const TITLE_CASE_FIELDS = [
   "name",
@@ -42,6 +43,7 @@ export default function ProfileForm({
   isCompleting = false,
 }) {
   const { children, selectedChild, setSelectedChildId } = useParentChild();
+  const { user } = useAuth();
   const normalizedProfile = normalizeTitleCaseFields(profile, TITLE_CASE_FIELDS);
   const initialRelationType = normalizedProfile?.relation_type || "mother";
 
@@ -180,7 +182,7 @@ export default function ProfileForm({
     }
   }
 
-  const currentAvatarUrl = previewUrl || profile?.avatar_url;
+  const currentAvatarUrl = previewUrl || user?.avatar_url;
   const hasAvatar = Boolean(currentAvatarUrl);
 
   async function handleFormSubmit(data) {
