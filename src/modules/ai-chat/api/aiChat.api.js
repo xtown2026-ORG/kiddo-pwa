@@ -34,6 +34,18 @@ export function askAiImageQuestion({ image, question, subject }) {
   });
 }
 
+export function generateRagAnswerMode(payload) {
+  return api.post(
+    "/rag-explanation",
+    {
+      question: payload?.question,
+      answer: payload?.answer,
+      mode: payload?.mode,
+    },
+    payload?.mode === "detail" ? { timeout: 60000 } : undefined
+  );
+}
+
 export function listAiChatConversations(params = {}) {
   return api.get("/ai-chat/conversations", { params });
 }

@@ -1,4 +1,4 @@
-import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button, TextField, InputAdornment } from "@mui/material";
+import { Box, useTheme, Zoom, IconButton, Drawer, List, ListItem, ListItemButton, ListItemText, Typography, Divider, Button, TextField, InputAdornment, Snackbar, Alert } from "@mui/material";
 import { Add, Close, SmartToy, VolumeUp, Mic, Menu as MenuIcon, ChatBubbleOutline, Search } from "@mui/icons-material";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -18,8 +18,9 @@ import teachingClip from "../../../assets/gif/teaching.mp4";
 import thinkingClip from "../../../assets/gif/thinking.mp4";
 
 const QUIZ_REDIRECT_THRESHOLD = 30;
-const SUBJECTS = ["Maths", "Physics", "Chemistry"];
+const SUBJECTS = ["Maths", "Physics", "Chemistry", "Other Subjects"];
 const GEMINI_SOLVER_SUBJECTS = new Set(["maths", "physics", "chemistry"]);
+const SUBJECT_REQUIRED_MESSAGE = "Please select a specific subject.";
 const CHAT_INPUT_DOCK_HEIGHT = 138;
 const CHAT_INPUT_DOCK_EXPANDED_HEIGHT = 262;
 const CHAT_FOOTER_SAFE_GAP = 28;
@@ -73,12 +74,16 @@ export default function AiChatPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [subjectValidationMessage, setSubjectValidationMessage] = useState("");
   const [pendingRelatedNavigation, setPendingRelatedNavigation] = useState(null);
+  const [ragAnswerLoadingByMessageId, setRagAnswerLoadingByMessageId] = useState({});
+  const [ragAnswerError, setRagAnswerError] = useState("");
   const messagesScrollRef = useRef(null);
   const previousUserCountRef = useRef(0);
   const imageInputRef = useRef(null);
   const createdImageUrlsRef = useRef([]);
   const relatedRequestIdRef = useRef(0);
+  const ragExplanationCacheRef = useRef({ question: "", answers: {} });
   const navigate = useNavigate();
   const location = useLocation();
   const classLevel = user?.class_level ?? "general";
@@ -94,6 +99,8 @@ export default function AiChatPage() {
     historyHasMore,
     historyQuery,
     sendMessage,
+    generateRagAnswerForMessage,
+    appendRagAnswerForMessage,
     loadConversation,
     startNewChat,
     loadMoreConversations,
@@ -119,6 +126,7 @@ export default function AiChatPage() {
     if (showIntro) setShowIntro(false);
     const selectedImage = selectedImages[0] || null;
     const subjectForRequest = selectedSubject;
+    ragExplanationCacheRef.current = { question: text, answers: {} };
     try {
       return await sendMessage(text, null, {
         subject: subjectForRequest,
@@ -138,6 +146,10 @@ export default function AiChatPage() {
 
   async function handleQuestionNavigation(text) {
     if (!text || loadingRelatedQuestions) return;
+    if (!selectedSubject) {
+      setSubjectValidationMessage(SUBJECT_REQUIRED_MESSAGE);
+      return;
+    }
 
     const isGeminiSolverRequest = GEMINI_SOLVER_SUBJECTS.has(
       String(selectedSubject || "").trim().toLowerCase()
@@ -188,6 +200,54 @@ export default function AiChatPage() {
     const originalQuestion = pendingRelatedNavigation.question;
     setPendingRelatedNavigation(null);
     await handleSendMessage(originalQuestion);
+  }
+
+  async function handleRagAnswerMode(message, mode) {
+    const messageId = message?.id;
+    const question = message?.metadata?.originalQuestion;
+    const answer = message?.text || message?.content || "";
+    if (!messageId || !question || !answer || ragAnswerLoadingByMessageId[messageId]?.[mode]) return;
+
+    if (ragExplanationCacheRef.current.question !== question) {
+      ragExplanationCacheRef.current = { question, answers: {} };
+    }
+
+    const cachedAnswer = ragExplanationCacheRef.current.answers[mode];
+    if (cachedAnswer) {
+      appendRagAnswerForMessage({ answerText: cachedAnswer, mode });
+      return;
+    }
+
+    setRagAnswerError("");
+    setRagAnswerLoadingByMessageId((prev) => ({
+      ...prev,
+      [messageId]: {
+        ...(prev[messageId] || {}),
+        [mode]: true,
+      },
+    }));
+    try {
+      const answerText = await generateRagAnswerForMessage({ question, answer, mode });
+      ragExplanationCacheRef.current.answers[mode] = answerText;
+    } catch (error) {
+      setRagAnswerError(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          "AI assistant is temporarily unavailable. Please try again."
+      );
+    } finally {
+      setRagAnswerLoadingByMessageId((prev) => {
+        const next = { ...prev };
+        const messageLoading = { ...(next[messageId] || {}) };
+        delete messageLoading[mode];
+        if (Object.keys(messageLoading).length) {
+          next[messageId] = messageLoading;
+        } else {
+          delete next[messageId];
+        }
+        return next;
+      });
+    }
   }
 
   function handleImageUpload(event) {
@@ -447,6 +507,8 @@ export default function AiChatPage() {
           <ChatList
             messages={messages}
             userAvatar={user?.avatar_url}
+            ragAnswerLoadingByMessageId={ragAnswerLoadingByMessageId}
+            onRagAnswerMode={handleRagAnswerMode}
           />
 
           {pendingRelatedNavigation && (
@@ -577,7 +639,10 @@ export default function AiChatPage() {
                 variant={isSelected ? "contained" : "outlined"}
                 aria-pressed={isSelected}
                 disabled={loading || loadingRelatedQuestions}
-                onClick={() => setSelectedSubject(subject)}
+                onClick={() => {
+                  setSelectedSubject(subject);
+                  setSubjectValidationMessage("");
+                }}
                 sx={{ borderRadius: 999, textTransform: "none", minWidth: 88 }}
               >
                 {subject}
@@ -585,6 +650,16 @@ export default function AiChatPage() {
             );
           })}
         </Box>
+        {subjectValidationMessage ? (
+          <Typography
+            role="alert"
+            variant="caption"
+            color="error"
+            sx={{ display: "block", px: 1, mb: 1 }}
+          >
+            {subjectValidationMessage}
+          </Typography>
+        ) : null}
         {selectedImages.length > 0 && (
           <Box
             sx={{
@@ -714,6 +789,16 @@ export default function AiChatPage() {
           100% { opacity: 0.2; }
         }
       `}</style>
+      <Snackbar
+        open={Boolean(ragAnswerError)}
+        autoHideDuration={4000}
+        onClose={() => setRagAnswerError("")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setRagAnswerError("")}>
+          {ragAnswerError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

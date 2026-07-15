@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
     Box, Typography, Button, IconButton, TextField, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Paper, Grid, MenuItem, CircularProgress, Alert, useMediaQuery, useTheme, Card, CardContent
+    Paper, Grid, MenuItem, CircularProgress, Alert, useMediaQuery, useTheme, Card, CardContent, Autocomplete
 } from "@mui/material";
 import { Add, Delete, Save } from "@mui/icons-material";
 import api from "../../../api/axios";
@@ -25,12 +25,12 @@ export default function ExamTimetablePanel({ exam }) {
             try {
                 setLoading(true);
                 const [subsRes, ttRes] = await Promise.all([
-                    api.get("/subjects"),
+                    api.get("/subjects", { params: { class_id: exam?.class_id } }),
                     api.get(`/exams/${exam.id}/timetable`)
                 ]);
                 if (!active) return;
                 
-                const subjectsData = subsRes.data?.data || subsRes.data || [];
+                const subjectsData = subsRes.data?.items || subsRes.data?.data || subsRes.data || [];
                 setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
                 
                 const ttData = ttRes.data?.data || [];
@@ -41,11 +41,10 @@ export default function ExamTimetablePanel({ exam }) {
                         exam_date: t.exam_date,
                         start_time: t.start_time || "",
                         end_time: t.end_time || "",
-                        max_marks: t.max_marks || "",
-                        passing_marks: t.passing_marks || ""
+                        max_marks: t.max_marks || ""
                     })));
                 } else {
-                    setEntries([{ subject_id: "", exam_date: exam.start_date || "", start_time: "", end_time: "", max_marks: "100", passing_marks: "40" }]);
+                    setEntries([{ subject_id: "", exam_date: exam.start_date || "", start_time: "", end_time: "", max_marks: "100" }]);
                 }
             } catch (err) {
                 console.error("Failed to load timetable data", err);
@@ -59,7 +58,7 @@ export default function ExamTimetablePanel({ exam }) {
     }, [exam]);
 
     const handleAddEntry = () => {
-        setEntries([...entries, { subject_id: "", exam_date: exam.start_date || "", start_time: "", end_time: "", max_marks: "100", passing_marks: "40" }]);
+        setEntries([...entries, { subject_id: "", exam_date: exam.start_date || "", start_time: "", end_time: "", max_marks: "100" }]);
     };
 
     const handleRemoveEntry = (index) => {
@@ -86,8 +85,7 @@ export default function ExamTimetablePanel({ exam }) {
                         exam_date: e.exam_date,
                         start_time: e.start_time || undefined,
                         end_time: e.end_time || undefined,
-                        max_marks: e.max_marks ? Number(e.max_marks) : undefined,
-                        passing_marks: e.passing_marks ? Number(e.passing_marks) : undefined,
+                        max_marks: e.max_marks ? Number(e.max_marks) : undefined
                     }))
             };
 
@@ -157,20 +155,23 @@ export default function ExamTimetablePanel({ exam }) {
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
                                         <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Subject</Typography>
-                                        <TextField
-                                            select
-                                            fullWidth
+                                        <Autocomplete
+                                            options={subjects}
+                                            getOptionLabel={(option) => option.name || ""}
+                                            value={subjects.find(s => s.id === entry.subject_id) || null}
+                                            onChange={(e, newValue) => handleChange(index, "subject_id", newValue ? newValue.id : "")}
+                                            isOptionEqualToValue={(option, value) => option.id === value.id}
                                             size="small"
-                                            value={entry.subject_id}
-                                            onChange={(e) => handleChange(index, "subject_id", e.target.value)}
-                                        >
-                                            <MenuItem value="" disabled>Select Subject</MenuItem>
-                                            {subjects.map(s => (
-                                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                                            ))}
-                                        </TextField>
+                                            fullWidth
+                                            renderInput={(params) => (
+                                                <TextField 
+                                                    {...params} 
+                                                    placeholder="Select Subject" 
+                                                />
+                                            )}
+                                        />
                                     </Grid>
-                                    <Grid item xs={6}>
+                                    <Grid item xs={12} sm={6}>
                                         <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Start Time</Typography>
                                         <TextField
                                             type="time"
@@ -181,7 +182,7 @@ export default function ExamTimetablePanel({ exam }) {
                                             InputLabelProps={{ shrink: true }}
                                         />
                                     </Grid>
-                                    <Grid item xs={6}>
+                                    <Grid item xs={12} sm={6}>
                                         <Typography variant="caption" color="textSecondary" mb={0.5} display="block">End Time</Typography>
                                         <TextField
                                             type="time"
@@ -192,7 +193,7 @@ export default function ExamTimetablePanel({ exam }) {
                                             InputLabelProps={{ shrink: true }}
                                         />
                                     </Grid>
-                                    <Grid item xs={6}>
+                                    <Grid item xs={12}>
                                         <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Max Marks</Typography>
                                         <TextField
                                             size="small"
@@ -200,16 +201,6 @@ export default function ExamTimetablePanel({ exam }) {
                                             placeholder="Max"
                                             value={entry.max_marks}
                                             onChange={(e) => handleChange(index, "max_marks", e.target.value)}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={6}>
-                                        <Typography variant="caption" color="textSecondary" mb={0.5} display="block">Pass Marks</Typography>
-                                        <TextField
-                                            size="small"
-                                            fullWidth
-                                            placeholder="Pass"
-                                            value={entry.passing_marks}
-                                            onChange={(e) => handleChange(index, "passing_marks", e.target.value)}
                                         />
                                     </Grid>
                                 </Grid>
@@ -226,7 +217,7 @@ export default function ExamTimetablePanel({ exam }) {
                                 <TableCell>Subject</TableCell>
                                 <TableCell>Start Time</TableCell>
                                 <TableCell>End Time</TableCell>
-                                <TableCell>Max / Pass Marks</TableCell>
+                                <TableCell>Max Marks</TableCell>
                                 <TableCell width={50}></TableCell>
                             </TableRow>
                         </TableHead>
@@ -244,19 +235,22 @@ export default function ExamTimetablePanel({ exam }) {
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <TextField
-                                            select
-                                            fullWidth
+                                        <Autocomplete
+                                            options={subjects}
+                                            getOptionLabel={(option) => option.name || ""}
+                                            value={subjects.find(s => s.id === entry.subject_id) || null}
+                                            onChange={(e, newValue) => handleChange(index, "subject_id", newValue ? newValue.id : "")}
+                                            isOptionEqualToValue={(option, value) => option.id === value.id}
                                             size="small"
-                                            value={entry.subject_id}
-                                            onChange={(e) => handleChange(index, "subject_id", e.target.value)}
+                                            fullWidth
                                             sx={{ minWidth: 150 }}
-                                        >
-                                            <MenuItem value="" disabled>Select Subject</MenuItem>
-                                            {subjects.map(s => (
-                                                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-                                            ))}
-                                        </TextField>
+                                            renderInput={(params) => (
+                                                <TextField 
+                                                    {...params} 
+                                                    placeholder="Select Subject" 
+                                                />
+                                            )}
+                                        />
                                     </TableCell>
                                     <TableCell>
                                         <TextField
@@ -277,22 +271,13 @@ export default function ExamTimetablePanel({ exam }) {
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Box display="flex" gap={1}>
-                                            <TextField
-                                                size="small"
-                                                placeholder="Max"
-                                                value={entry.max_marks}
-                                                onChange={(e) => handleChange(index, "max_marks", e.target.value)}
-                                                sx={{ width: 70 }}
-                                            />
-                                            <TextField
-                                                size="small"
-                                                placeholder="Pass"
-                                                value={entry.passing_marks}
-                                                onChange={(e) => handleChange(index, "passing_marks", e.target.value)}
-                                                sx={{ width: 70 }}
-                                            />
-                                        </Box>
+                                        <TextField
+                                            size="small"
+                                            placeholder="Max"
+                                            value={entry.max_marks}
+                                            onChange={(e) => handleChange(index, "max_marks", e.target.value)}
+                                            sx={{ width: 100 }}
+                                        />
                                     </TableCell>
                                     <TableCell>
                                         <IconButton size="small" color="error" onClick={() => handleRemoveEntry(index)}>

@@ -60,24 +60,25 @@ export default function ProfilePage() {
           ? "/parent"
           : "";
 
+  const requiresApproval = user?.role === "student" || user?.role === "parent" || user?.role === "teacher";
+
   useEffect(() => {
     if (
       user?.approval_status === "approved" &&
       localStorage.getItem("profile_update_pending") === "true"
     ) {
       localStorage.removeItem("profile_update_pending");
-      navigate(basePath + "/dashboard", { replace: true });
     }
-  }, [user?.approval_status, navigate, basePath]);
+  }, [user?.approval_status]);
 
   async function handleProfileSubmit(data) {
     try {
       await saveProfile(data);
-      if (user?.role === "student" || user?.role === "parent") {
+      if (requiresApproval) {
         localStorage.setItem("profile_update_pending", "true");
       }
       setSaveSuccess(true);
-      if (user?.role === "student" || user?.role === "parent") {
+      if (requiresApproval) {
         navigate("/approval-pending", { replace: true });
       }
     } catch (err) {
@@ -161,8 +162,8 @@ export default function ProfilePage() {
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert severity="success" onClose={() => setSaveSuccess(false)} sx={{ width: "100%" }}>
-          {user?.role === "student" || user?.role === "parent"
-            ? "Your profile update request has been submitted successfully and is awaiting teacher approval."
+          {requiresApproval
+            ? "Your profile update request has been submitted successfully and is awaiting admin approval."
             : "Profile saved successfully."}
         </Alert>
       </Snackbar>

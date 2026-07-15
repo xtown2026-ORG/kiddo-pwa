@@ -47,8 +47,8 @@ export default function ProfileForm({
   const normalizedProfile = normalizeTitleCaseFields(profile, TITLE_CASE_FIELDS);
   const initialRelationType = normalizedProfile?.relation_type || "mother";
 
-  const { register, handleSubmit, control, reset, formState: { errors, isValid, isSubmitted } } = useForm({
-    mode: 'onBlur',
+  const { register, handleSubmit, control, reset, getValues, formState: { errors, isValid, isSubmitted, dirtyFields } } = useForm({
+    mode: 'all',
     defaultValues: {
       name: normalizedProfile?.name || "",
       phone: normalizedProfile?.phone || "",
@@ -110,8 +110,8 @@ export default function ProfileForm({
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setImageError("Profile image must not exceed 2 MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      setImageError("Profile image must not exceed 10 MB.");
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -124,8 +124,19 @@ export default function ProfileForm({
       // Upload the file
       const url = await onAvatarUpload(file);
 
-      // Update profile with new avatar URL
-      await onSave({ avatar_url: url });
+      // Update profile with new avatar URL alongside existing form values
+      const currentValues = getValues();
+      await onSave({
+        name: currentValues.name || normalizedProfile?.name || "",
+        phone: currentValues.phone || normalizedProfile?.phone || "",
+        email: currentValues.email || normalizedProfile?.email || "",
+        gender: currentValues.gender || normalizedProfile?.gender || "",
+        designation: currentValues.designation || normalizedProfile?.designation || "",
+        qualification: currentValues.qualification || normalizedProfile?.qualification || "",
+        experience: currentValues.experience || normalizedProfile?.experience || 0,
+        ...currentValues,
+        avatar_url: url 
+      });
 
       // Clean up preview
       revokeImagePreview(preview);
@@ -151,10 +162,21 @@ export default function ProfileForm({
 
       if (onAvatarDelete) {
         await onAvatarDelete();
-      } else {
-        // Fallback: just clear the avatar URL
-        await onSave({ avatar_url: "" });
       }
+      
+      // Always clear the avatar URL alongside existing form values
+      const currentValues = getValues();
+      await onSave({
+        name: currentValues.name || normalizedProfile?.name || "",
+        phone: currentValues.phone || normalizedProfile?.phone || "",
+        email: currentValues.email || normalizedProfile?.email || "",
+        gender: currentValues.gender || normalizedProfile?.gender || "",
+        designation: currentValues.designation || normalizedProfile?.designation || "",
+        qualification: currentValues.qualification || normalizedProfile?.qualification || "",
+        experience: currentValues.experience || normalizedProfile?.experience || 0,
+        ...currentValues,
+        avatar_url: ""
+      });
     } catch (deleteError) {
       console.error("Avatar delete failed:", deleteError);
     }
@@ -321,35 +343,38 @@ export default function ProfileForm({
 
         {/* Upload Info removed (Chip dependency not used elsewhere) */}
 
-        {/* Form Fields */}
         <TextField
           label="Name"
           fullWidth
-          inputProps={{ style: { textTransform: "capitalize" } }}
+          inputProps={{ style: { textTransform: "capitalize" }, maxLength: 50 }}
           error={Boolean(errors.name)}
           helperText={errors.name?.message}
+          color={dirtyFields.name && !errors.name ? "success" : "primary"}
           {...register("name", {
-            required: "Name is required.",
+            required: "Please enter a valid full name.",
             minLength: {
               value: 3,
-              message: "Name must be at least 3 characters long."
+              message: "Please enter a valid full name."
             },
             maxLength: {
               value: 50,
-              message: "Name cannot exceed 50 characters."
+              message: "Please enter a valid full name."
             },
             validate: {
-              noLeadingTrailingSpaces: (v) => !v || v.trim() === v || "Name cannot start or end with spaces.",
-              noConsecutiveSpaces: (v) => !v || !/\s{2,}/.test(v) || "Name cannot contain consecutive spaces.",
-              validChars: (v) => !v || /^[A-Za-z\s]+$/.test(v) || "Name can contain only letters and spaces."
+              validFormat: (v) => !v || /^[A-Za-z]+( [A-Za-z]+)*$/.test(v) || "Please enter a valid full name."
             }
           })}
+          onInput={(e) => {
+            // Allow only alphabets and single spaces, max 50 chars
+            e.target.value = e.target.value.replace(/[^A-Za-z\s]/g, '').replace(/\s{2,}/g, ' ').slice(0, 50);
+          }}
         />
 
         <TextField
           label="Phone"
           fullWidth
           error={Boolean(errors.phone)}
+          color={dirtyFields.phone && !errors.phone ? "success" : "primary"}
           helperText={
             errors.phone?.message ||
             (profile?.role === "student"
@@ -357,13 +382,10 @@ export default function ProfileForm({
               : "")
           }
           {...register("phone", {
-            required: "Phone number is required.",
+            required: "Please enter a valid 10-digit mobile number.",
             pattern: {
-              value: /^\d{10}$/,
+              value: /^[6-9]\d{9}$/,
               message: "Please enter a valid 10-digit mobile number."
-            },
-            validate: {
-              firstDigit: (v) => !v || /^[6789]/.test(v) || "Phone number must start with 6, 7, 8, or 9."
             }
           })}
           onInput={(e) => {
@@ -585,7 +607,10 @@ export default function ProfileForm({
                 inputProps={{ "aria-label": "Gender" }}
                 error={Boolean(errors.gender)}
                 helperText={errors.gender?.message}
-                {...register("gender")}
+                color={dirtyFields.gender && !errors.gender ? "success" : "primary"}
+                {...register("gender", {
+                  required: "Please select your gender."
+                })}
               >
                 <option value="" disabled>
                   Select Gender
@@ -597,32 +622,46 @@ export default function ProfileForm({
               <TextField
                 label="Designation"
                 fullWidth
-                inputProps={{ style: { textTransform: "capitalize" } }}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ style: { textTransform: "capitalize" }, maxLength: 30 }}
                 error={Boolean(errors.designation)}
                 helperText={errors.designation?.message}
-                {...register("designation")}
+                color={dirtyFields.designation && !errors.designation ? "success" : "primary"}
+                {...register("designation", {
+                  required: "Please enter a valid designation.",
+                  minLength: { value: 2, message: "Please enter a valid designation." },
+                  maxLength: { value: 30, message: "Please enter a valid designation." },
+                  pattern: {
+                    value: /^[A-Za-z\s]+$/,
+                    message: "Please enter a valid designation."
+                  }
+                })}
+                onInput={(e) => {
+                  e.target.value = e.target.value.replace(/[^A-Za-z\s]/g, '').replace(/\s{2,}/g, ' ').slice(0, 30);
+                }}
               />
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
               <TextField
                 label="Qualification"
                 fullWidth
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ style: { textTransform: "capitalize" }, maxLength: 50 }}
                 error={Boolean(errors.qualification)}
                 helperText={errors.qualification?.message}
+                color={dirtyFields.qualification && !errors.qualification ? "success" : "primary"}
                 {...register("qualification", {
-                  minLength: {
-                    value: 2,
-                    message: "Qualification must be between 2 and 100 characters."
-                  },
-                  maxLength: {
-                    value: 100,
-                    message: "Qualification must be between 2 and 100 characters."
-                  },
-                  validate: {
-                    noLeadingTrailingSpaces: (v) => !v || v.trim() === v || "Qualification cannot start or end with spaces.",
-                    validChars: (v) => !v || /^[a-zA-Z\s,.\-()]+$/.test(v) || "Qualification must contain only letters, spaces, commas, periods, hyphens, and parentheses."
+                  required: "Please enter your qualification.",
+                  minLength: { value: 2, message: "Please enter your qualification." },
+                  maxLength: { value: 50, message: "Please enter your qualification." },
+                  pattern: {
+                    value: /^[A-Za-z\s.]+$/,
+                    message: "Please enter your qualification."
                   }
                 })}
+                onInput={(e) => {
+                  e.target.value = e.target.value.replace(/[^A-Za-z\s.]/g, '').replace(/\s{2,}/g, ' ').slice(0, 50);
+                }}
               />
               <TextField
                 label="Experience (Years)"
@@ -630,13 +669,14 @@ export default function ProfileForm({
                 fullWidth
                 error={Boolean(errors.experience)}
                 helperText={errors.experience?.message}
+                color={dirtyFields.experience && !errors.experience ? "success" : "primary"}
                 {...register("experience", {
+                  required: "Please enter valid experience between 0 and 50 years.",
                   valueAsNumber: true,
-                  min: { value: 0, message: "Experience must be between 0 and 50 years." },
-                  max: { value: 50, message: "Experience must be between 0 and 50 years." },
+                  min: { value: 0, message: "Please enter valid experience between 0 and 50 years." },
+                  max: { value: 50, message: "Please enter valid experience between 0 and 50 years." },
                   validate: {
-                    validNumber: (v) => !v || !isNaN(v) || "Experience must be a valid number.",
-                    decimal: (v) => !v || /^\d+(\.\d)?$/.test(v.toString()) || "Experience can contain up to one decimal place."
+                    decimal: (v) => !v || /^\d+(\.\d)?$/.test(v.toString()) || "Please enter valid experience between 0 and 50 years."
                   }
                 })}
               />
@@ -647,16 +687,17 @@ export default function ProfileForm({
               type="email"
               error={Boolean(errors.email)}
               helperText={errors.email?.message}
+              color={dirtyFields.email && !errors.email ? "success" : "primary"}
               {...register("email", {
-                maxLength: {
-                  value: 100,
-                  message: "Email address cannot exceed 100 characters."
-                },
+                required: "Please enter a valid email address.",
                 pattern: {
                   value: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
                   message: "Please enter a valid email address."
                 }
               })}
+              onInput={(e) => {
+                e.target.value = e.target.value.toLowerCase().trim();
+              }}
             />
           </>
         )}
@@ -666,7 +707,7 @@ export default function ProfileForm({
           type="submit"
           variant="contained"
           fullWidth
-          disabled={saving || uploading}
+          disabled={saving || uploading || !isValid}
           startIcon={saving ? <CircularProgress size={20} /> : <CloudUpload />}
         >
           {saving ? 'Saving...' : (isCompleting ? 'Complete Profile' : 'Save Profile')}

@@ -10,6 +10,7 @@ import {
     Person,
     Palette,
     Logout,
+    NotificationsActive,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
@@ -33,6 +34,7 @@ export default function TeacherSidebar({ open, onClose }) {
         { label: "Assigned Classes", icon: <School />, path: "/teacher/assigned-classes" },
         { label: "Diary & Homework", icon: <Book />, path: "/teacher/diary" },
         { label: "Approvals", icon: <Assignment />, path: "/teacher/approvals" },
+        { label: "Notifications", icon: <NotificationsActive />, path: "/teacher/notifications" },
         { label: "Results", icon: <Assessment />, path: "/teacher/results" },
         { label: "Students Reports", icon: <Assessment />, path: "/teacher/students-reports" },
         { label: "Exams & Reports", icon: <Assessment />, path: "/teacher/exams/create" }, // Redirects to creation for now

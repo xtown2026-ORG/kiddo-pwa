@@ -82,26 +82,32 @@ export default function RequireApproval({ children }) {
   const currentFirstLogin = user?.first_login ?? profileGate.firstLogin;
   const currentApprovalStatus = user?.approval_status ?? profileGate.approvalStatus;
 
-  if (user?.role !== "parent" && currentFirstLogin === true && !isOnCompletionPath) {
-    return (
-      <Navigate to={completionPath} state={{ from: location }} replace />
-    );
+  // 1. Enforce profile completion FIRST
+  if (currentFirstLogin === true) {
+    if (user?.role === "parent") {
+      if (!isParentProfileRoute) {
+        return <Navigate to="/parent/profile" state={{ from: location }} replace />;
+      }
+      return children;
+    } else {
+      if (!isOnCompletionPath) {
+        return <Navigate to={completionPath} state={{ from: location }} replace />;
+      }
+      return children;
+    }
   }
 
-  if (user?.role === "parent" && isParentProfileRoute) {
-    return children;
-  }
-
-  // Only redirect if we have a confirmed non-approved status (not null/undefined which means unknown)
+  // 2. If profile is completed, enforce admin approval
   if (currentApprovalStatus !== null && currentApprovalStatus !== "approved") {
     const isApprovalRoute = location.pathname.startsWith("/approval-pending");
-    const isProfileUpdatePending = currentFirstLogin !== true && currentApprovalStatus === "pending";
-
-    if (!isApprovalRoute && !isProfileUpdatePending) {
+    
+    // If not approved, they must be on the approval pending page
+    if (!isApprovalRoute) {
       return (
         <Navigate to="/approval-pending" state={{ from: location }} replace />
       );
     }
+    return children;
   }
 
   return children;

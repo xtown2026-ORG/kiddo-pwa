@@ -123,10 +123,10 @@ export default function FirstLoginPage() {
         throw new Error(`Invalid file type. Allowed: ${allowedTypes.join(', ')}`);
       }
 
-      // Validate file size (5MB limit)
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      // Validate file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        throw new Error("File size too large. Maximum size: 5MB");
+        throw new Error("File size too large. Maximum size: 10MB");
       }
 
       // Create preview
@@ -168,13 +168,41 @@ export default function FirstLoginPage() {
   }
 
   async function handleNext() {
-    if (activeStep === steps.length - 1) {
+    if (activeStep === 0) {
+      if (!formData.name?.trim()) {
+        setError("Full Name is required");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (!formData.phone?.trim()) {
+        setError("Phone Number is required");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (formData.phone.length < 10) {
+        setError("Please enter a valid 10-digit Phone Number");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (formData.email && formData.email.trim() !== "") {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+          setError("Please enter a valid email address");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+      }
+      setError(null);
+    }
+
+    if (activeStep === steps.length - 1 || steps.length === 0) {
       // Submit form
       await handleSubmit();
     } else {
       setActiveStep((prev) => prev + 1);
     }
   }
+
 
   function handleBack() {
     if (activeStep > 0) {
@@ -361,7 +389,7 @@ export default function FirstLoginPage() {
                   </Stack>
 
                   <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1 }}>
-                    <Chip label="Max 5MB" size="small" variant="outlined" />
+                    <Chip label="Max 10MB" size="small" variant="outlined" />
                     <Chip label="JPEG, PNG, WebP" size="small" variant="outlined" />
                   </Stack>
 
@@ -410,6 +438,7 @@ export default function FirstLoginPage() {
                   value={formData.phone}
                   onChange={(e) => handleInputChange("phone", e.target.value)}
                   fullWidth
+                  required
                   inputProps={{
                     inputMode: "numeric",
                     pattern: "[0-9]*",
@@ -539,7 +568,7 @@ export default function FirstLoginPage() {
             >
               {loading ? (
                 <CircularProgress size={24} />
-              ) : activeStep === steps.length - 1 ? (
+              ) : (activeStep === steps.length - 1 || steps.length === 0) ? (
                 "Complete"
               ) : (
                 "Next"
