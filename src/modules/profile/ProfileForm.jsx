@@ -461,55 +461,7 @@ export default function ProfileForm({
         {/* Student Fields */}
         {profile?.role === 'student' && (
           <>
-            <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
-              Parent Details
-            </Typography>
-            <TextField
-              label="Email"
-              fullWidth
-              type="email"
-              {...register("email")}
-            />
-            <TextField
-              label="Relation Type"
-              fullWidth
-              select
-              defaultValue={initialRelationType}
-              SelectProps={{ native: true }}
-              {...register("relation_type")}
-            >
-              <option value="guardian">Guardian</option>
-              <option value="parent">Parent</option>
-            </TextField>
-            <Typography variant="subtitle1" sx={{ alignSelf: 'start', fontWeight: 'bold', mt: 1 }}>
-              Linked Student
-            </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
-              <TextField
-                label="Student Name"
-                fullWidth
-                value={profile?.student?.User?.name || profile?.student?.user?.name || profile?.student?.name || "—"}
-                InputProps={{ readOnly: true }}
-              />
-              <TextField
-                label="Admission No"
-                fullWidth
-                value={profile?.student?.admission_no || "—"}
-                InputProps={{ readOnly: true }}
-              />
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: '100%' }}>
-              <TextField
-                label="Class"
-                fullWidth
-                value={profile?.class?.class_name || "—"}
-              />
-              <TextField
-                label="Section"
-                fullWidth
-                value={profile?.section?.name || "—"}
-              />
-            </Stack>
+
             <TextField
               label="Email"
               fullWidth
