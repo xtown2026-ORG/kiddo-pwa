@@ -174,7 +174,7 @@ export function AuthProvider({ children }) {
 
       if (!SUPPORTED_ROLES.includes(decoded.role)) {
         throw new Error(
-          "This portal supports only student, teacher, and parent accounts"
+          "Invalid Username or Password"
         );
       }
 

@@ -31,6 +31,7 @@ export default function CreateHomeworkDialog({
     const [assignmentsLoading, setAssignmentsLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [urlError, setUrlError] = useState("");
 
     const getTodayDate = () => {
         const d = new Date();
@@ -38,7 +39,7 @@ export default function CreateHomeworkDialog({
     };
 
     const [formData, setFormData] = useState({
-        class_section: "", 
+        class_section: "",
         subject_id: "",
         teacher_assignment_id: "",
         homework_date: getTodayDate(),
@@ -188,6 +189,23 @@ export default function CreateHomeworkDialog({
         }
     }, [formData.class_section, subjectOptions]);
 
+
+    const validateAttachmentUrl = (url) => {
+        if (!url) return "";
+
+        try {
+            const parsed = new URL(url);
+
+            if (parsed.protocol !== "https:") {
+                return "Invalid URL. Please use HTTPS link only.";
+            }
+
+            return "";
+        } catch {
+            return "Invalid URL. Please use HTTPS link only.";
+        }
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         if (name === "subject_id") {
@@ -201,6 +219,18 @@ export default function CreateHomeworkDialog({
             });
             return;
         }
+        if (name === "attachment_url") {
+            const errorMsg = validateAttachmentUrl(value);
+            setUrlError(errorMsg);
+
+            setFormData({
+                ...formData,
+                attachment_url: value,
+            });
+
+            return;
+        }
+
         setFormData({ ...formData, [name]: value });
     };
 
@@ -214,6 +244,12 @@ export default function CreateHomeworkDialog({
             !formData.description
         ) {
             setError("Please fill all mandatory fields (Title, Due Date, Subject, Description)");
+            return;
+        }
+
+        const attachmentError = validateAttachmentUrl(formData.attachment_url);
+        if (attachmentError) {
+            setUrlError(attachmentError);
             return;
         }
 
@@ -252,10 +288,10 @@ export default function CreateHomeworkDialog({
     };
 
     return (
-        <Dialog 
-            open={open} 
-            onClose={!loading ? onClose : undefined} 
-            fullWidth 
+        <Dialog
+            open={open}
+            onClose={!loading ? onClose : undefined}
+            fullWidth
             maxWidth="sm"
             PaperProps={{
                 sx: { borderRadius: 3, boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }
@@ -349,8 +385,12 @@ export default function CreateHomeworkDialog({
                             value={formData.attachment_url}
                             onChange={handleChange}
                             disabled={loading}
+                            error={Boolean(urlError)}
+                            helperText={urlError}
                             sx={{
-                                "& .MuiOutlinedInput-root": { borderRadius: 2 }
+                                "& .MuiOutlinedInput-root": {
+                                    borderRadius: 2
+                                }
                             }}
                         />
                     </Stack>
@@ -376,9 +416,9 @@ export default function CreateHomeworkDialog({
                 <Button onClick={onClose} disabled={loading} color="inherit" sx={{ borderRadius: 2, px: 3 }}>
                     Cancel
                 </Button>
-                <Button 
-                    onClick={handleSubmit} 
-                    variant="contained" 
+                <Button
+                    onClick={handleSubmit}
+                    variant="contained"
                     disabled={loading || !formData.class_section || !formData.subject_id || !formData.description}
                     sx={{ borderRadius: 2, px: 4, py: 1 }}
                 >

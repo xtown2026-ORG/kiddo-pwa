@@ -128,7 +128,7 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
                     </FormControl>
 
                     <FormControl fullWidth>
-                        <InputLabel id="target-class-label">Target Class (Optional)</InputLabel>
+                        <InputLabel id="target-class-label" shrink>Target Class (Optional)</InputLabel>
                         <Select
                             labelId="target-class-label"
                             name="class_section"

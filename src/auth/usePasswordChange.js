@@ -22,7 +22,7 @@ export function usePasswordChange() {
       }
 
       if (passwordData.new_password.length < 6) {
-        throw new Error("New password must be at least 6 characters");
+        throw new Error("New at least 6 characters");
       }
 
       if (passwordData.old_password === passwordData.new_password) {

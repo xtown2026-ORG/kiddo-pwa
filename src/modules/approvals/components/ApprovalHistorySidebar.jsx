@@ -7,7 +7,7 @@ import {
 import { Close, Search, HistoryEdu } from '@mui/icons-material';
 import { getTeacherApprovalHistory } from '../approvals.api';
 
-export default function ApprovalHistorySidebar({ open, onClose }) {
+export default function ApprovalHistorySidebar({ open, onClose, limit = 10 }) {
   const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,7 +23,7 @@ export default function ApprovalHistorySidebar({ open, onClose }) {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const res = await getTeacherApprovalHistory();
+      const res = await getTeacherApprovalHistory({ limit });
       const payload = res?.data ?? res ?? {};
       const items = payload?.items ?? payload?.data?.items ?? [];
       setHistoryItems(items);
@@ -47,8 +47,8 @@ export default function ApprovalHistorySidebar({ open, onClose }) {
       const statusMatches = filterStatus === 'All' || item.approval_status === filterStatus;
       
       return matchesSearch && typeMatches && statusMatches;
-    }).slice(0, 10); // Display only last 10
-  }, [historyItems, searchQuery, filterType, filterStatus]);
+    }).slice(0, limit);
+  }, [historyItems, searchQuery, filterType, filterStatus, limit]);
 
   const getStatusColor = (status) => {
     switch (status) {
