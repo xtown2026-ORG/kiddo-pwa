@@ -109,10 +109,10 @@ export function useProfile() {
         throw new Error(`Invalid file type. Allowed: ${allowedTypes.join(', ')}`);
       }
 
-      // Validate file size (5MB limit)
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      // Validate file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        throw new Error("File size too large. Maximum size: 5MB");
+        throw new Error("File size too large. Maximum size: 10MB");
       }
 
       // Delete old avatar if exists
@@ -149,9 +149,7 @@ export function useProfile() {
         await deleteProfilePicture(profile.avatar_url);
       }
 
-      // Update profile to remove avatar URL
-      await saveProfile({ avatar_url: "" });
-
+      // ProfileForm.jsx will handle saving the full profile payload
       return true;
     } catch (err) {
       const message = err.message || "Avatar deletion failed";

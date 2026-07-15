@@ -2,8 +2,7 @@ export function toTitleCase(value) {
   if (typeof value !== "string") return value;
 
   return value
-    .trim()
-    .replace(/\s+/g, " ")
+    .replace(/\s{2,}/g, " ") // Only collapse multiple spaces, allow single trailing spaces while typing
     .toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

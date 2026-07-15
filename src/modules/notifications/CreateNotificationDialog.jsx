@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Dialog,
     DialogTitle,
@@ -13,11 +13,11 @@ import {
     Stack,
     Alert
 } from "@mui/material";
-import { useTeacherTimetable } from "../teacher-timetable/useTeacherTimetable";
+import { useTeacherAssignments } from "../teacher-timetable/useTeacherAssignments";
 import { createNotification } from "./notifications.api";
 
 export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
-    const { timetable } = useTeacherTimetable();
+    const { assignments } = useTeacherAssignments();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -26,32 +26,46 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
         message: "",
         target_role: "student",
         class_section: "", // Combined value "classId,sectionId"
+        category: "Announcement",
+        priority_level: "Low",
     });
 
-    // Deduplicate classes from timetable
+    // Deduplicate classes from assignments
     const classOptions = useMemo(() => {
-        if (!timetable) return [];
-        const slots = Array.isArray(timetable)
-            ? timetable
-            : Object.values(timetable || {}).flat();
+        if (!assignments || !Array.isArray(assignments)) return [];
         const unique = new Map();
-        slots.forEach((t) => {
-            if (t.class_id && t.section_id) {
-                const key = `${t.class_id},${t.section_id}`;
+        assignments.forEach((a) => {
+            if (a.class_id && a.section_id) {
+                const key = `${a.class_id},${a.section_id}`;
                 if (!unique.has(key)) {
                     unique.set(key, {
-                        class_id: t.class_id,
-                        section_id: t.section_id,
-                        label: `${t.class?.name || t.Class?.class_name || t.class_id} - ${t.section?.name || t.Section?.name || t.section_id}`,
+                        class_id: a.class_id,
+                        section_id: a.section_id,
+                        label: `${a.Class?.class_name || a.class?.name || a.class_id} - ${a.Section?.name || a.section?.name || a.section_id}`,
                     });
                 }
             }
         });
         return Array.from(unique.values());
-    }, [timetable]);
+    }, [assignments]);
+
+    // Automatically select the class if the teacher only has 1 assigned class
+    useEffect(() => {
+        if (classOptions.length === 1 && !formData.class_section) {
+            setFormData(prev => ({
+                ...prev,
+                class_section: `${classOptions[0].class_id},${classOptions[0].section_id}`
+            }));
+        }
+    }, [classOptions]);
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        let val = e.target.value;
+        if ((e.target.name === 'title' || e.target.name === 'message') && val.length > 0) {
+            // Capitalize the first letter of every word for both title and message
+            val = val.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        }
+        setFormData({ ...formData, [e.target.name]: val });
     };
 
     const handleSubmit = async () => {
@@ -68,6 +82,8 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
                 title: formData.title,
                 message: formData.message,
                 target_role: formData.target_role,
+                category: formData.category,
+                priority_level: formData.priority_level,
             };
 
             if (formData.class_section) {
@@ -123,7 +139,7 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
                         >
                             <MenuItem value="student">Students</MenuItem>
                             <MenuItem value="parent">Parents</MenuItem>
-                            <MenuItem value="all">Everyone</MenuItem>
+                            <MenuItem value="all">Everyone (Students & Parents)</MenuItem>
                         </Select>
                     </FormControl>
 
@@ -135,12 +151,6 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
                             label="Target Class (Optional)"
                             value={formData.class_section}
                             onChange={handleChange}
-                            displayEmpty
-                            renderValue={(selected) =>
-                                selected
-                                    ? classOptions.find((opt) => `${opt.class_id},${opt.section_id}` === selected)?.label
-                                    : "All my associated classes"
-                            }
                         >
                             <MenuItem value="">
                                 <em>All my associated classes</em>
@@ -155,6 +165,8 @@ export default function CreateNotificationDialog({ open, onClose, onSuccess }) {
                             ))}
                         </Select>
                     </FormControl>
+
+                    
                 </Stack>
             </DialogContent>
             <DialogActions>
