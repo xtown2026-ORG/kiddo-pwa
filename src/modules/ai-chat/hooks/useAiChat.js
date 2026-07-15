@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   askAiImageQuestion,
   askAiQuestion,
+  generateRagAnswerMode,
   getAiChatConversation,
   listAiChatConversations,
   syncAiChatConversations,
@@ -388,6 +389,9 @@ export function useAiChat({ classLevel, userId }) {
         : null;
     const selectedImage = options?.image || null;
     const subject = options?.subject ?? null;
+    const isOtherSubjectsRagRequest =
+      !selectedImage &&
+      String(subject || "").trim().toLowerCase() === "other subjects";
 
     const userMsg = {
       id: createId("msg"),
@@ -430,11 +434,25 @@ export function useAiChat({ classLevel, userId }) {
         res?.answer ??
         res?.data?.message ??
         "AI assistant is temporarily unavailable. Please try again.";
+      const responseMetadata =
+        res?.data?.metadata && typeof res.data.metadata === "object"
+          ? res.data.metadata
+          : res?.metadata && typeof res.metadata === "object"
+          ? res.metadata
+          : {};
 
       const aiMsg = {
         id: createId("msg"),
         role: "ai",
         text: String(answerText),
+        metadata: isOtherSubjectsRagRequest
+          ? {
+              ...responseMetadata,
+              ragAnswerControls: true,
+              originalQuestion: text,
+              subject,
+            }
+          : responseMetadata,
         timestamp: new Date().toISOString(),
       };
 
@@ -447,8 +465,21 @@ export function useAiChat({ classLevel, userId }) {
       return aiMsg.text; // IMPORTANT: for voice mode
     } catch (error) {
       const isUnauthorized = error?.response?.status === 401;
+      const backendErrorData = error?.response?.data;
+      const backendMessage =
+        (typeof backendErrorData === "string" ? backendErrorData : "") ||
+        backendErrorData?.message ||
+        backendErrorData?.error ||
+        backendErrorData?.detail ||
+        backendErrorData?.data?.message ||
+        "";
+      const isSubjectMismatchError =
+        typeof backendMessage === "string" &&
+        backendMessage.toLowerCase().includes("selected subject");
       const fallbackText =
-        isUnauthorized
+        isSubjectMismatchError
+          ? backendMessage
+          : isUnauthorized
           ? "Session required for AI. Please login again and retry."
           : selectedImage
           ? "Unable to read the uploaded image right now. Please try again."
@@ -472,6 +503,39 @@ export function useAiChat({ classLevel, userId }) {
     }
   }
 
+  function appendRagAnswerForMessage({ answerText, mode }) {
+    const aiMsg = {
+      id: createId("msg"),
+      role: "ai",
+      text: String(answerText),
+      metadata: {
+        ragAnswerMode: mode,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => {
+      const next = [...prev, aiMsg];
+      saveConversation(next);
+      return next;
+    });
+
+    return aiMsg.text;
+  }
+
+  async function generateRagAnswerForMessage({ question, answer, mode }) {
+    const res = await generateRagAnswerMode({ question, answer, mode });
+    const answerText =
+      (typeof res?.data === "string" && res.data.trim() ? res.data : null) ??
+      res?.data?.answer ??
+      res?.answer ??
+      res?.data?.message ??
+      res?.message ??
+      "AI assistant is temporarily unavailable. Please try again.";
+
+    return appendRagAnswerForMessage({ answerText, mode });
+  }
+
   return {
     messages,
     conversations,
@@ -481,6 +545,8 @@ export function useAiChat({ classLevel, userId }) {
     historyHasMore,
     historyQuery,
     sendMessage,
+    generateRagAnswerForMessage,
+    appendRagAnswerForMessage,
     startNewChat: () => {
       setMessages([]);
       setActiveConversationId(null);
